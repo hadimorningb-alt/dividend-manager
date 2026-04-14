@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>아이콘 생성기</title>
+</head>
+<body>
+    <canvas id="canvas192" width="192" height="192"></canvas>
+    <canvas id="canvas512" width="512" height="512"></canvas>
+    
+    <script>
+        // 192x192 아이콘
+        const canvas192 = document.getElementById('canvas192');
+        const ctx192 = canvas192.getContext('2d');
+        
+        ctx192.fillStyle = '#3498db';
+        ctx192.fillRect(0, 0, 192, 192);
+        ctx192.fillStyle = 'white';
+        ctx192.font = 'bold 80px Arial';
+        ctx192.textAlign = 'center';
+        ctx192.textBaseline = 'middle';
+        ctx192.fillText('💰', 96, 96);
+        
+        // 512x512 아이콘
+        const canvas512 = document.getElementById('canvas512');
+        const ctx512 = canvas512.getContext('2d');
+        
+        ctx512.fillStyle = '#3498db';
+        ctx512.fillRect(0, 0, 512, 512);
+        ctx512.fillStyle = 'white';
+        ctx512.font = 'bold 220px Arial';
+        ctx512.textAlign = 'center';
+        ctx512.textBaseline = 'middle';
+        ctx512.fillText('💰', 256, 256);
+        
+        // 다운로드 버튼
+        document.body.innerHTML += '<br><button onclick="download192()">192 다운로드</button>';
+        document.body.innerHTML += '<button onclick="download512()">512 다운로드</button>';
+        
+        function download192() {
+            const link = document.createElement('a');
+            link.download = 'icon-192.png';
+            link.href = canvas192.toDataURL();
+            link.click();
+        }
+        
+        function download512() {
+            const link = document.createElement('a');
+            link.download = 'icon-512.png';
+            link.href = canvas512.toDataURL();
+            link.click();
+        }
+    </script>
+</body>
+</html>
