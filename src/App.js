@@ -186,9 +186,9 @@ if (loading) {
     paddingBottom: '20px', 
     borderBottom: '1px solid rgba(255,255,255,0.2)' 
   }}>
-    <h1 style={{ margin: 0, fontSize: '24px' }}>💰 모닝비의 배당관리</h1>
+    <h1 style={{ margin: 0, fontSize: '24px' }}>💰 나의 미국 배당주 관리하기</h1>
     <p style={{ margin: '5px 0 0 0', fontSize: '12px', opacity: 0.8 }}>
-      육아맘의 똑똑한 투자
+      똑똑한 투자
     </p>
   </div>
 
@@ -2676,7 +2676,7 @@ function AboutPage() {
       <section style={{ marginBottom: '30px' }}>
         <h3 style={{ color: '#34495e' }}>우리의 미션</h3>
         <p>
-          배당관리자는 개인 투자자들이 배당 포트폴리오를 쉽고 보기 쉽게 관리할 수 있는 도구입니다.<br/>
+          배당관리자는 개인 투자자들이 미국 배당주식 포트폴리오를 쉽고 보기 쉽게 관리할 수 있는 도구입니다.<br/>
           안정적인 현금 흐름과 월배당의 목표를 달성하기 위한 투자자들을 위해 만들어졌습니다.
         </p>
       </section>
@@ -2706,7 +2706,6 @@ function AboutPage() {
         <h3 style={{ color: '#34495e' }}>문의 및 만든이</h3>
         <p>
           이메일: hadimorningb@gmail.com<br/>
-          블로그: blog.naver.com/00morningb<br/>
         </p>
       </section>
 
@@ -2734,7 +2733,7 @@ function PrivacyPage() {
 
       <section style={{ marginBottom: '30px' }}>
         <h3 style={{ color: '#34495e' }}>1. 수집하는 개인정보</h3>
-        <p>모닝비 배당관리자는 다음과 같은 정보를 수집합니다:</p>
+        <p>배당관리자 사이트 관리자는 다음과 같은 정보를 수집합니다:</p>
         <ul style={{ paddingLeft: '20px' }}>
           <li>이메일 주소 (관리자에게 메일 문의 시)</li>
           <li>포트폴리오 데이터 (종목, 수량 등 - 로컬 저장)</li>
