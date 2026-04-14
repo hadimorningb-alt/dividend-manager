@@ -1576,6 +1576,26 @@ function DividendNewsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+    return (
+    <div>
+      <h1 style={{ margin: '0 0 30px 0', color: '#2c3e50' }}>배당 뉴스</h1>
+      <div style={{
+        background: '#fff3cd',
+        padding: '40px',
+        borderRadius: '8px',
+        textAlign: 'center',
+        border: '1px solid #ffc107'
+      }}>
+        <p style={{ margin: '0 0 15px 0', fontSize: '48px' }}>📰</p>
+        <p style={{ margin: 0, color: '#856404', fontSize: '16px', lineHeight: '1.6' }}>
+          <strong>배당 뉴스 기능은 준비 중입니다.</strong><br/><br/>
+          뉴스 API 제공사의 CORS 정책으로 인해 현재 브라우저에서 직접 호출이 제한되어 있습니다.<br/>
+          서버리스 함수를 통한 안전한 방법으로 곧 제공하겠습니다.
+        </p>
+      </div>
+    </div>
+  );
+  
   // 🔥 GNews API로 뉴스 가져오기
   const fetchNews = async () => {
     setLoading(true);
