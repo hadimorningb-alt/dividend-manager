@@ -186,9 +186,9 @@ if (loading) {
     paddingBottom: '20px', 
     borderBottom: '1px solid rgba(255,255,255,0.2)' 
   }}>
-    <h1 style={{ margin: 0, fontSize: '24px' }}>💰 나의 미국 배당주 관리하기</h1>
+    <h1 style={{ margin: 0, fontSize: '24px' }}>💰 미국 배당주 관리하기</h1>
     <p style={{ margin: '5px 0 0 0', fontSize: '12px', opacity: 0.8 }}>
-      똑똑한 투자
+      똑똑한 투자(beta)
     </p>
   </div>
 
@@ -1567,7 +1567,7 @@ function GoalTrackerPage({ stocks }) {
 
 
 // ============================================
-// 📰 배당 뉴스 페이지 (실제 API 버전)
+// 📰 배당 뉴스 페이지
 // ============================================
 function DividendNewsPage() {
   const [selectedCategory, setSelectedCategory] = useState('all');
@@ -1576,16 +1576,16 @@ function DividendNewsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
-  // 🔥 실제 뉴스 가져오기
+  // 🔥 GNews API로 뉴스 가져오기
   const fetchNews = async () => {
     setLoading(true);
     setError(null);
 
     try {
-      const API_KEY = process.env.REACT_APP_NEWS_API_KEY;
+      const API_KEY = process.env.REACT_APP_GNEWS_API_KEY;  // 🔥 변경
       
       if (!API_KEY) {
-        throw new Error('NewsAPI 키가 설정되지 않았습니다.');
+        throw new Error('GNews API 키가 설정되지 않았습니다.');
       }
 
       // 검색 키워드 설정
@@ -1595,14 +1595,18 @@ function DividendNewsPage() {
       if (selectedCategory === 'high-yield') keyword = 'high yield dividend';
       if (selectedCategory === 'tax') keyword = 'dividend tax';
 
-      const url = `https://newsapi.org/v2/everything?q=${keyword}&language=en&sortBy=publishedAt&pageSize=20&apiKey=${API_KEY}`;
+      // 🔥 GNews API URL
+      const url = `https://gnews.io/api/v4/search?q=${encodeURIComponent(keyword)}&lang=en&max=20&apikey=${API_KEY}`;
 
-      console.log('🔄 뉴스 API 호출 중...', keyword);
+      console.log('🔄 GNews API 호출 중...', keyword);
 
       const response = await fetch(url);
       const data = await response.json();
 
-      if (data.status === 'ok') {
+      console.log('GNews 응답:', data);
+
+      // 🔥 GNews는 data.articles로 바로 접근
+      if (data.articles && Array.isArray(data.articles)) {
         // API 데이터를 우리 형식으로 변환
         const formattedNews = data.articles.map((article, index) => ({
           id: index,
@@ -1610,16 +1614,20 @@ function DividendNewsPage() {
           title: article.title,
           summary: article.description || article.content?.substring(0, 150) + '...',
           date: new Date(article.publishedAt).toISOString().split('T')[0],
-          source: article.source.name,
+          source: article.source?.name || 'Unknown',  // 🔥 안전한 접근
           ticker: null,
-          image: article.urlToImage ? '📰' : '📄',
+          image: article.image ? '📰' : '📄',  // 🔥 image 필드 사용
+          imageUrl: article.image,  // 🔥 실제 이미지 URL
           url: article.url
         }));
 
         setNewsData(formattedNews);
         console.log('✅ 뉴스 로드 완료:', formattedNews.length, '개');
+      } else if (data.errors) {
+        // 🔥 GNews 에러 처리
+        throw new Error(data.errors[0] || '뉴스를 가져올 수 없습니다.');
       } else {
-        throw new Error(data.message || '뉴스를 가져올 수 없습니다.');
+        throw new Error('뉴스를 가져올 수 없습니다.');
       }
     } catch (err) {
       console.error('❌ 뉴스 API 오류:', err);
@@ -1789,12 +1797,29 @@ function DividendNewsPage() {
                 }}
               >
                 <div style={{ display: 'flex', gap: '20px' }}>
-                  {/* 아이콘 */}
+                  {/* 아이콘/이미지 */}
                   <div style={{
                     fontSize: '48px',
                     flexShrink: 0
                   }}>
-                    {news.image}
+                    {news.imageUrl ? (
+                      <img 
+                        src={news.imageUrl} 
+                        alt={news.title}
+                        style={{
+                          width: '80px',
+                          height: '80px',
+                          objectFit: 'cover',
+                          borderRadius: '8px'
+                        }}
+                        onError={(e) => {
+                          e.target.style.display = 'none';
+                          e.target.parentElement.textContent = '📰';
+                        }}
+                      />
+                    ) : (
+                      news.image
+                    )}
                   </div>
 
                   {/* 내용 */}
@@ -1857,7 +1882,7 @@ function DividendNewsPage() {
         border: '1px solid #bee5eb'
       }}>
         <p style={{ margin: 0, color: '#0c5460' }}>
-          💡 <strong>NewsAPI 무료 플랜:</strong> 하루 100개 요청 제한. 
+          💡 <strong>GNews API 무료 플랜:</strong> 하루 100개 요청 제한. 
           실시간 뉴스가 표시됩니다. 뉴스를 클릭하면 원문으로 이동합니다.
         </p>
       </div>
@@ -2671,10 +2696,10 @@ function LegalPages() {
 function AboutPage() {
   return (
     <div>
-      <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>💰 배당관리자 소개</h2>
+      <h2 style={{ color: '#2c3e50', marginBottom: '20px' }}>미국 배당주 관리하기 시스템 소개(beta)</h2>
       
       <section style={{ marginBottom: '30px' }}>
-        <h3 style={{ color: '#34495e' }}>우리의 미션</h3>
+        <h3 style={{ color: '#34495e' }}>우리의 목표</h3>
         <p>
           배당관리자는 개인 투자자들이 미국 배당주식 포트폴리오를 쉽고 보기 쉽게 관리할 수 있는 도구입니다.<br/>
           안정적인 현금 흐름과 월배당의 목표를 달성하기 위한 투자자들을 위해 만들어졌습니다.
