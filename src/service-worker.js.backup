@@ -1,5 +1,5 @@
 // 🔥 Service Worker - 캐싱 및 오프라인 지원
-
+/*
 const CACHE_NAME = 'dividend-manager-v1';
 
 // 설치
@@ -44,3 +44,4 @@ self.addEventListener('fetch', (event) => {
       })
   );
 });
+*/
