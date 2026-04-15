@@ -23,7 +23,16 @@ function App() {
   const [exchangeUpdateTime, setExchangeUpdateTime] = useState('');
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  
+useEffect(() => {
+  const handleResize = () => setWindowWidth(window.innerWidth);
+  window.addEventListener('resize', handleResize);
+  return () => window.removeEventListener('resize', handleResize);
+}, []);
 
+const isMobile = windowWidth <= 768;  // 🔥 추가
  
 // 🔥 Firebase에서 데이터 불러오기 (수정)
 const loadStocks = async () => {
@@ -163,160 +172,177 @@ if (loading) {
   );
 }
 
-  return (
-    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden' }}>
-      
-{/* 왼쪽 사이드바 */}
-<div style={{
-  width: '250px',
-  background: '#2c3e50',
+return (
+  <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+    
+    {/* 🔥 모바일 상단바 (768px 이하에서만 보임) */}
+    <div style={{
+  position: 'fixed',
+  top: 0,
+  left: 0,
+  right: 0,
+  height: '60px',
+  background: 'transparent',
   color: 'white',
-  padding: '20px',
-  boxShadow: 'none',
-  position: 'relative',
-  borderRight: '1px solid #dfe6e9',
   display: 'flex',
-  flexDirection: 'column',
-  height: '100vh'
-}}>
-  
-  {/* 로고 */}
-  <div style={{ 
-    marginBottom: '40px', 
-    paddingBottom: '20px', 
-    borderBottom: '1px solid rgba(255,255,255,0.2)' 
-  }}>
-    <h1 style={{ margin: 0, fontSize: '24px' }}>💰 미국 배당주 관리하기</h1>
-    <p style={{ margin: '5px 0 0 0', fontSize: '12px', opacity: 0.8 }}>
-      똑똑한 투자(beta)
-    </p>
-  </div>
-
-  {/* 🔥 메뉴 리스트 - 정보 제외 */}
-  <div style={{ flex: 1, overflowY: 'auto' }}>
-    {menuItems.filter(item => item.name !== '정보').map(item => (
-      <div 
-        key={item.name}
-        onClick={() => setCurrentPage(item.name)}
-        style={{
-          padding: '15px 20px',
-          marginBottom: '10px',
-          borderRadius: '5px',
-          cursor: 'pointer',
-          background: currentPage === item.name ? '#34495e' : 'transparent',
-          transition: 'background 0.2s',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px',
-          borderLeft: currentPage === item.name ? '3px solid #3498db' : '3px solid transparent'
-        }}
-        onMouseEnter={(e) => {
-          if (currentPage !== item.name) {
-            e.currentTarget.style.background = '#34495e';
-          }
-        }}
-        onMouseLeave={(e) => {
-          if (currentPage !== item.name) {
-            e.currentTarget.style.background = 'transparent';
-          }
-        }}
-      >
-        <span style={{ fontSize: '20px' }}>{item.icon}</span>
-        <span style={{ fontSize: '14px', fontWeight: currentPage === item.name ? '600' : '400' }}>
-          {item.name}
-        </span>
-      </div>
-    ))}
-  </div>
-
-  {/* 🔥 하단 정보 (환율, 종목 수) */}
-  <div style={{
-    padding: '15px',
-    background: 'rgba(0,0,0,0.2)',
-    borderRadius: '10px',
-    fontSize: '13px',
-    marginBottom: '15px'
-  }}>
-    <p style={{ margin: 0 }}>총 종목: {stocks.length}개</p>
-    <p style={{ margin: '5px 0 0 0', opacity: 0.8 }}>
-      💱 ₩{exchangeRate.toFixed(2)}/USD
-    </p>
-    {exchangeUpdateTime && (
-      <p style={{ margin: '5px 0 0 0', opacity: 0.6, fontSize: '11px' }}>
-        {exchangeUpdateTime} 갱신
-      </p>
-    )}
-  </div>
-
-  {/* 🔥 Legal 페이지 버튼 (맨 하단) */}
-  <div style={{
-    borderTop: '1px solid rgba(255,255,255,0.1)',
-    paddingTop: '15px'
-  }}>
-    <div
-      onClick={() => setCurrentPage('정보')}
-      style={{
-        padding: '15px 20px',
-        borderRadius: '5px',
-        cursor: 'pointer',
-        background: currentPage === '정보' ? '#34495e' : 'transparent',
-        transition: 'background 0.2s',
-        display: 'flex',
-        alignItems: 'center',
-        gap: '10px',
-        borderLeft: currentPage === '정보' ? '3px solid #3498db' : '3px solid transparent'
-      }}
-      onMouseEnter={(e) => {
-        if (currentPage !== '정보') {
-          e.currentTarget.style.background = '#34495e';
-        }
-      }}
-      onMouseLeave={(e) => {
-        if (currentPage !== '정보') {
-          e.currentTarget.style.background = 'transparent';
-        }
-      }}
-    >
-      <span style={{ fontSize: '20px' }}>ℹ️</span>
-      <span style={{ fontSize: '14px', fontWeight: currentPage === '정보' ? '600' : '400' }}>
-        정보
-      </span>
-    </div>
-  </div>
-
+  alignItems: 'center',
+  justifyContent: 'flex-end',
+  padding: '0 20px',
+  zIndex: 1000,
+  //boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+}}
+className="mobile-header">
+  <button
+    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+    style={{
+      background: '#2c3e50',  // 🔥 버튼만 배경색
+      border: 'none',
+      color: 'white',
+      fontSize: '24px',
+      cursor: 'pointer',
+      padding: '8px 12px',
+      lineHeight: 1,
+      borderRadius: '8px',  // 🔥 둥글게
+      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'  // 🔥 그림자
+    }}
+  >
+    {isMobileMenuOpen ? '✕' : '☰'}
+  </button>
 </div>
 
+    {/* 🔥 사이드바 (데스크톱 고정 / 모바일 토글) */}
+    
+  
+    <div 
+      style={{
+       width: '250px',
+    background: '#2c3e50',
+    color: 'white',
+    height: '100vh',
+    display: 'flex',
+    flexDirection: 'column',
+    position: isMobile ? 'fixed' : 'relative',     // 🔥 조건부
+    top: isMobile ? 0 : 'auto',                    // 🔥 조건부
+    left: isMobile ? 0 : 'auto',                   // 🔥 조건부
+    zIndex: 999,
+    transition: 'transform 0.3s ease',
+    transform: isMobile 
+      ? (isMobileMenuOpen ? 'translateX(0)' : 'translateX(-100%)') 
+      : 'none'                                     // 🔥 조건부
+  }}
+  className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}
+    >
+      <div style={{ padding: '30px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+        <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold' }}>💰 배당 포트폴리오</h1>
+        <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#95a5a6' }}>
+          US Stocks & Bonds
+        </p>
+      </div>
 
-      
-      {/* 메인 컨텐츠 */}
+      <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 0' }}>
+        {menuItems.map((item) => (
+          <button
+            key={item.name}
+            onClick={() => {
+              setCurrentPage(item.name);
+              setIsMobileMenuOpen(false);  // 🔥 모바일에서 메뉴 닫기
+            }}
+            style={{
+              width: '100%',
+              padding: '15px 20px',
+              background: currentPage === item.name ? '#34495e' : 'transparent',
+              color: 'white',
+              border: 'none',
+              textAlign: 'left',
+              cursor: 'pointer',
+              fontSize: '15px',
+              transition: 'background 0.2s',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '12px'
+            }}
+            onMouseEnter={(e) => {
+              if (currentPage !== item.name) {
+                e.target.style.background = 'rgba(255,255,255,0.05)';
+              }
+            }}
+            onMouseLeave={(e) => {
+              if (currentPage !== item.name) {
+                e.target.style.background = 'transparent';
+              }
+            }}
+          >
+            <span style={{ fontSize: '20px' }}>{item.icon}</span>
+            <span>{item.name}</span>
+          </button>
+        ))}
+      </nav>
+
       <div style={{ 
-        flex: 1, 
-        background: '#f5f5f5', 
-        overflowY: 'auto',
-        padding: '40px'
+        padding: '20px', 
+        borderTop: '1px solid rgba(255,255,255,0.1)',
+        fontSize: '12px',
+        color: '#95a5a6'
       }}>
-        {currentPage === '포트폴리오' && (
-          <PortfolioPage 
-            stocks={stocks} 
-            setStocks={setStocks}
-            fetchStockPrice={fetchStockPrice}
-            loadStocks={loadStocks} //수동
-            db={db} //수동
-            user={user}
-          />
+        <p style={{ margin: '0 0 8px 0' }}>
+          💱 환율: ₩{exchangeRate.toFixed(2)}
+        </p>
+        {exchangeUpdateTime && (
+          <p style={{ margin: 0, fontSize: '11px' }}>
+            {exchangeUpdateTime} 업데이트
+          </p>
         )}
-        {currentPage === '배당 캘린더' && <CalendarPage stocks={stocks} />}
-        {currentPage === '종목별 배당' && <StockDividendPage stocks={stocks} />}
-        {currentPage === '목표 달성률' && <GoalTrackerPage stocks={stocks} />}
-        {currentPage === '배당 뉴스' && <DividendNewsPage />}
-        {currentPage === '인기 배당주' && <PopularDividendStocksPage />}
-        {currentPage === '투자 거장' && <InvestorLegendsPage />}
-        {currentPage === '세금 계산기' && <TaxCalculatorPage exchangeRate={exchangeRate} />}
-       {currentPage === '설정' && <SettingsPage user={user} />}
-        {currentPage === '정보' && <LegalPages />}
       </div>
     </div>
-  );
+
+    {/* 🔥 모바일 오버레이 (메뉴 열렸을 때 배경 어둡게) */}
+    {isMobileMenuOpen && (
+      <div
+        onClick={() => setIsMobileMenuOpen(false)}
+        style={{
+          display: 'none',
+          position: 'fixed',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: 'rgba(0,0,0,0.5)',
+          zIndex: 998
+        }}
+        className="mobile-overlay"
+      />
+    )}
+
+    {/* 메인 콘텐츠 */}
+    <div style={{
+      flex: 1,
+      padding: '40px',
+      overflowY: 'auto',
+      background: '#ecf0f1'
+    }}
+    className="main-content">
+      {currentPage === '포트폴리오' && (
+        <PortfolioPage 
+          stocks={stocks} 
+          setStocks={setStocks} 
+          loadStocks={loadStocks}
+          fetchStockPrice={fetchStockPrice}
+          db={db}
+          user={user}
+        />
+      )}
+      {currentPage === '배당 캘린더' && <CalendarPage stocks={stocks} />}
+      {currentPage === '종목별 배당' && <StockDividendPage stocks={stocks} />}
+      {currentPage === '세금 계산기' && <TaxCalculatorPage exchangeRate={exchangeRate} />}
+      {currentPage === '목표 달성률' && <GoalTrackerPage stocks={stocks} />}
+      {currentPage === '배당 뉴스' && <DividendNewsPage />}
+      {currentPage === '인기 배당주' && <PopularDividendStocksPage />}
+      {currentPage === '투자 거장' && <InvestorLegendsPage />}
+      {currentPage === '설정' && <SettingsPage setStocks={setStocks} db={db} user={user} />}
+      {currentPage === '정보' && <LegalPages />}
+    </div>
+  </div>
+);
 }
 
 // ============================================
@@ -1016,6 +1042,15 @@ console.log('캐시 삭제 완료!');
 // 📅 배당 캘린더
 // ============================================
 function CalendarPage({ stocks }) {
+  // 🔥 반응형 state
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
   const months = Array.from({length: 12}, (_, i) => i + 1);
   
   const getMonthlyDividend = (month) => {
@@ -1023,19 +1058,14 @@ function CalendarPage({ stocks }) {
       if (!stock.dividendMonths) return false;
       if (stock.dividendMonths === '매월') return true;
 
-      // 🔥 수정: 정확한 월 매칭
       const monthStr = stock.dividendMonths;
-        // "1월,6월,12월" 형식
       if (monthStr.includes('월')) {
         const monthsArray = monthStr.split(',').map(m => m.trim());
         return monthsArray.includes(`${month}월`);
       }
       
-      // "1,6,12" 형식
       const monthsArray = monthStr.split(',').map(m => m.trim());
       return monthsArray.includes(String(month));
-
-      //return stock.dividendMonths.includes(String(month)); //???
     });
   };
 
@@ -1045,9 +1075,11 @@ function CalendarPage({ stocks }) {
       
       <div style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: '20px'
-      }}>
+  gridTemplateColumns: 'repeat(4, 1fr)',  // 🔥 데스크톱 4열 고정
+  gap: '20px'
+      }}
+      className="calendar-grid">
+
         {months.map(month => {
           const monthStocks = getMonthlyDividend(month);
           const totalDividend = monthStocks.reduce((sum, stock) => {
@@ -1136,7 +1168,14 @@ function StockDividendPage({ stocks }) {
               </div>
             </div>
 
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(12, 1fr)', gap: '10px' }}>
+            {/* 🔥 className 추가 */}
+            <div style={{ display: 'grid', 
+  gridTemplateColumns: window.innerWidth <= 768 
+    ? (window.innerWidth <= 480 ? 'repeat(3, 1fr)' : 'repeat(4, 1fr)')
+    : 'repeat(12, 1fr)',
+  gap: window.innerWidth <= 768 ? '8px' : '10px'
+}}
+className="dividend-months-grid">
               {Array.from({length: 12}, (_, i) => i + 1).map(month => {
                 // 🔥 수정: 정확한 월 매칭
                 let hasDividend = false;
@@ -1164,7 +1203,8 @@ function StockDividendPage({ stocks }) {
                     borderRadius: '8px',
                     textAlign: 'center',
                     border: hasDividend ? '2px solid #4caf50' : '1px solid #e0e0e0'
-                  }}>
+                  }}
+                  className="month-box">  {/* 🔥 className 추가 */}
                     <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>{month}월</p>
                     <p style={{ margin: '5px 0 0 0', fontSize: '20px' }}>
                       {hasDividend ? '💰' : '-'}
@@ -1589,13 +1629,13 @@ function DividendNewsPage() {
         <p style={{ margin: '0 0 15px 0', fontSize: '48px' }}>📰</p>
         <p style={{ margin: 0, color: '#856404', fontSize: '16px', lineHeight: '1.6' }}>
           <strong>배당 뉴스 기능은 준비 중입니다.</strong><br/><br/>
-          뉴스 API 제공사의 CORS 정책으로 인해 현재 브라우저에서 직접 호출이 제한되어 있습니다.<br/>
-          서버리스 함수를 통한 안전한 방법으로 곧 제공하겠습니다.
+          Restrict News API Delivery Policy<br/>
+          
         </p>
       </div>
     </div>
   );
-  
+
   // 🔥 GNews API로 뉴스 가져오기
   const fetchNews = async () => {
     setLoading(true);

@@ -37,17 +37,177 @@
   }
 }
 
+/* 🔥 기본 (데스크톱) - 모바일 요소 숨김 */
+.mobile-header {
+  display: none;
+}
 
+.mobile-overlay {
+  display: none;
+}
+
+/* 🔥 모바일 (768px 이하) */
 @media (max-width: 768px) {
-  .sidebar {
-    display: none; /* 모바일에선 숨기기 */
+  /* === 헤더 & 사이드바 === */
+  .mobile-header {
+    display: flex !important;
   }
-  
+
+  .sidebar {
+    position: fixed !important;
+    top: 0 !important;
+    left: 0 !important;
+    height: 100vh !important;
+    width: 250px !important;
+    transform: translateX(-100%) !important;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.3) !important;
+    transition: transform 0.3s ease !important;
+  }
+
+  .sidebar.open {
+    transform: translateX(0) !important;
+  }
+
+  .mobile-overlay {
+    display: block !important;
+  }
+
+  /* === 메인 콘텐츠 === */
   .main-content {
+    margin-left: 0 !important;
+    margin-top: 60px !important;
+    padding: 20px !important;
+    width: 100% !important;
+  }
+
+  /* === 텍스트 크기 === */
+  h1 {
+    font-size: 24px !important;
+  }
+
+  h2 {
+    font-size: 20px !important;
+  }
+
+  h3 {
+    font-size: 18px !important;
+  }
+
+  /* === 입력 요소 === */
+  button {
+    min-height: 44px !important;
+    font-size: 14px !important;
+    padding: 10px 15px !important;
+  }
+
+  input, select {
+    font-size: 16px !important;
+    min-height: 44px !important;
+  }
+
+  input[type="text"],
+  input[type="number"],
+  select {
+    width: 100% !important;
+    box-sizing: border-box !important;
+  }
+
+  /* === 레이아웃 === */
+  div[style*="gridTemplateColumns"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  div[style*="padding: '25px'"] {
+    padding: 15px !important;
+  }
+
+  div[style*="padding: '30px'"] {
     padding: 20px !important;
   }
-  
+
+  div[style*="padding: '40px'"] {
+    padding: 20px !important;
+  }
+
+  div[style*="gap: '20px'"] {
+    gap: 15px !important;
+  }
+
+  /* === 배당 캘린더 === */
+  .calendar-grid {
+    grid-template-columns: repeat(3, 1fr) !important;  /* 🔥 3열 */
+    gap: 15px !important;
+  }
+
+  div[style*="width: '80px'"] {
+    width: 60px !important;
+    height: 60px !important;
+    font-size: 12px !important;
+  }
+
+  div[style*="minWidth: '300px'"] {
+    min-width: 100% !important;
+  }
+
+  /* === 테이블 === */
   table {
-    font-size: 12px;
+    display: block !important;
+    overflow-x: auto !important;
+    white-space: nowrap !important;
+    -webkit-overflow-scrolling: touch !important;
+    font-size: 12px !important;
+  }
+
+  table th,
+  table td {
+    font-size: 12px !important;
+    padding: 8px !important;
+  }
+
+  /* === 종목별 배당 월 그리드 === */
+  .dividend-months-grid {
+    grid-template-columns: repeat(4, 1fr) !important;  /* 4열로 */
+    gap: 8px !important;
+  }
+  
+  .month-box {
+    padding: 10px 5px !important;
+  }
+  
+  .month-box p {
+    font-size: 11px !important;
+  }
+}
+
+/* 🔥 작은 모바일 (480px 이하) */
+@media (max-width: 480px) {
+  .main-content {
+    padding: 15px !important;
+  }
+
+  h1 {
+    font-size: 20px !important;
+  }
+
+  button {
+    font-size: 13px !important;
+    padding: 8px 12px !important;
+  }
+
+
+
+    /* === 종목별 배당 월 그리드 === */
+  .dividend-months-grid {
+    grid-template-columns: repeat(3, 1fr) !important;  /* 3열로 */
+    gap: 6px !important;
+  }
+
+   .calendar-grid {
+    grid-template-columns: repeat(3, 1fr) !important;  /* 🔥 3열 */
+    gap: 15px !important;
+  }
+  
+  .month-box {
+    padding: 8px 3px !important;
   }
 }
