@@ -81,17 +81,34 @@
   }
 
   /* === 텍스트 크기 === */
-  h1 {
-    font-size: 24px !important;
+  
+   h1 {
+    font-size: 22px !important;
   }
 
   h2 {
-    font-size: 20px !important;
+    font-size: 18px !important;
   }
 
   h3 {
-    font-size: 18px !important;
+    font-size: 16px !important;
   }
+
+  p {
+    font-size: 14px !important;
+  }
+
+  /* 작은 텍스트 */
+  p[style*="font-size: '12px'"],
+  p[style*="fontSize: '12px'"] {
+    font-size: 11px !important;
+  }
+
+  p[style*="font-size: '14px'"],
+  p[style*="fontSize: '14px'"] {
+    font-size: 13px !important;
+  }
+
 
   /* === 입력 요소 === */
   button {
@@ -177,7 +194,29 @@
   .month-box p {
     font-size: 11px !important;
   }
+
+   /* === 투자자 선택 버튼 1열 === */
+  div[style*="gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr)'"] {
+    grid-template-columns: 1fr !important;
+  }
+
+  /* === 보유 종목 더 작게 === */
+
+   .investor-holding-card {
+    flex-wrap: wrap !important;
+    padding: 12px !important;
+  }
+
+  .investor-holding-card strong {
+    font-size: 13px !important;
+  }
+
+  .investor-holding-card > div:nth-child(3) > div:first-child,
+  .investor-holding-card > div:nth-child(4) > div:first-child {
+    font-size: 14px !important;
+  }
 }
+
 
 /* 🔥 작은 모바일 (480px 이하) */
 @media (max-width: 480px) {
@@ -189,25 +228,63 @@
     font-size: 20px !important;
   }
 
+  h2 {
+    font-size: 16px !important;
+  }
+
+  h3 {
+    font-size: 15px !important;
+  }
+
+  p {
+    font-size: 13px !important;
+  }
+
   button {
     font-size: 13px !important;
     padding: 8px 12px !important;
   }
 
-
-
-    /* === 종목별 배당 월 그리드 === */
+  /* === 종목별 배당 월 그리드 === */
   .dividend-months-grid {
-    grid-template-columns: repeat(3, 1fr) !important;  /* 3열로 */
+    grid-template-columns: repeat(3, 1fr) !important;
     gap: 6px !important;
   }
 
-   .calendar-grid {
-    grid-template-columns: repeat(3, 1fr) !important;  /* 🔥 3열 */
-    gap: 15px !important;
+  /* === 배당 캘린더 === */
+  .calendar-grid {
+    grid-template-columns: repeat(3, 1fr) !important;
+    gap: 10px !important;
   }
   
   .month-box {
     padding: 8px 3px !important;
+  }
+
+  /* === 투자자 선택 버튼 1열 === */
+  div[style*="gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr)'"] {
+    grid-template-columns: 1fr !important;
+  }
+
+   .investor-holding-card {
+    padding: 12px !important;
+  }
+
+  .investor-holding-card strong {
+    font-size: 14px !important;
+  }
+
+  .investor-holding-card span {
+    font-size: 12px !important;
+  }
+
+  .investor-holding-card > div:first-child > div:first-child {
+    width: 28px !important;
+    height: 28px !important;
+    font-size: 12px !important;
+  }
+
+  .investor-holding-card > div:last-child > div > div:last-child {
+    font-size: 16px !important;
   }
 }
