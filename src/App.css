@@ -51,6 +51,7 @@
   /* === 헤더 & 사이드바 === */
   .mobile-header {
     display: flex !important;
+    height: 60px;
   }
 
   .sidebar {
@@ -75,10 +76,16 @@
   /* === 메인 콘텐츠 === */
   .main-content {
     margin-left: 0 !important;
-    margin-top: 60px !important;
+    margin-top: 80px !important;  /* 🔥 60px → 80px (h1 제목 안 가림) */
     padding: 20px !important;
     width: 100% !important;
   }
+  
+  /* h1 제목 상단 여백 제거 */
+  .main-content > div > h1:first-child {
+    margin-top: 0 !important;
+  }
+  
 
   /* === 텍스트 크기 === */
   

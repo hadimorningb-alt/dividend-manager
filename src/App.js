@@ -176,34 +176,40 @@ return (
   <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', position: 'relative' }}>
     
     {/* 🔥 모바일 상단바 (768px 이하에서만 보임) */}
-    <div style={{
+   <div style={{
   position: 'fixed',
   top: 0,
   left: 0,
   right: 0,
   height: '60px',
-  background: 'transparent',
+  background: '#2c3e50',  // 🔥 배경색 추가
   color: 'white',
-  display: 'flex',
+    display: isMobile ? 'flex' : 'none',
   alignItems: 'center',
-  justifyContent: 'flex-end',
+  justifyContent: 'space-between',  // 🔥 양쪽 정렬
   padding: '0 20px',
   zIndex: 1000,
-  //boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
 }}
 className="mobile-header">
+  <h1 style={{ 
+    margin: 0, 
+    fontSize: '18px', 
+    fontWeight: 'bold',
+    color: 'white'
+  }}>
+    💰 배당 포트폴리오
+  </h1>
   <button
     onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
     style={{
-      background: '#2c3e50',  // 🔥 버튼만 배경색
+      background: 'none',
       border: 'none',
       color: 'white',
-      fontSize: '24px',
+      fontSize: '28px',
       cursor: 'pointer',
-      padding: '8px 12px',
-      lineHeight: 1,
-      borderRadius: '8px',  // 🔥 둥글게
-      boxShadow: '0 2px 4px rgba(0,0,0,0.2)'  // 🔥 그림자
+      padding: '5px',
+      lineHeight: 1
     }}
   >
     {isMobileMenuOpen ? '✕' : '☰'}
@@ -316,9 +322,11 @@ className="mobile-header">
     {/* 메인 콘텐츠 */}
     <div style={{
       flex: 1,
-      padding: '40px',
+      padding: windowWidth <= 768 ? '20px' : '40px',
+      paddingTop: windowWidth <= 768 ? '100px' : '40px', 
       overflowY: 'auto',
       background: '#ecf0f1'
+
     }}
     className="main-content">
       {currentPage === '포트폴리오' && (
