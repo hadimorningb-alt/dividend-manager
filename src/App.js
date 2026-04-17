@@ -12,7 +12,8 @@ import {
   getDoc,
   setDoc
 } from 'firebase/firestore';
-import { onAuthStateChanged } from 'firebase/auth';
+import { onAuthStateChanged, signOut } from './firebase';
+import LoginPage from './LoginPage';
 //import toast, { Toaster } from 'react-hot-toast';
 
 
@@ -25,281 +26,354 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
-  
-useEffect(() => {
-  const handleResize = () => setWindowWidth(window.innerWidth);
-  window.addEventListener('resize', handleResize);
-  return () => window.removeEventListener('resize', handleResize);
-}, []);
 
-const isMobile = windowWidth <= 768;  // 🔥 추가
- 
-// 🔥 Firebase에서 데이터 불러오기 (수정)
-const loadStocks = async () => {
-  if (!user) return;  // 🔥 추가: 로그인 전에는 실행 안 함
-
-  try {
-    // 🔥 수정: users/{userId}/stocks
-    const q = query(collection(db, `users/${user.uid}/stocks`), orderBy('createdAt', 'desc'));
-    const querySnapshot = await getDocs(q);
-    const loadedStocks = [];
-    querySnapshot.forEach((document) => {
-      loadedStocks.push({ 
-        id: document.id, 
-        ...document.data() 
-      });
+  // 🔥 1. 인증 상태 감지 (하나만!)
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      console.log('👤 인증 상태:', currentUser?.email || '로그아웃');
+      setUser(currentUser);
+      setLoading(false);
     });
-    setStocks(loadedStocks);
-    console.log('✅ 내 종목 로드:', loadedStocks.length, '개');
-  } catch (error) {
-    console.error('❌ 데이터 로드 실패:', error);
-  }
-};
 
+    return () => unsubscribe();
+  }, []);
 
-// 🔥 실시간 환율 가져오기 (ExchangeRate-API 사용)
- const fetchExchangeRate = async () => {
-  try {
-    const url = 'https://api.exchangerate-api.com/v4/latest/USD';
-    
-    console.log('🔄 환율 API 호출 중...');
-    
-    const response = await fetch(url);
-    const data = await response.json();
-    
-    if (data && data.rates && data.rates.KRW) {
-      const rate = data.rates.KRW;
-      setExchangeRate(rate);
-      setExchangeUpdateTime(new Date().toLocaleTimeString('ko-KR'));
-      console.log('✅ 환율 업데이트:', rate.toFixed(2), '원/USD');
-    } else {
-      console.log('⚠️ 환율 데이터 없음, 기본값 유지');
+  // 🔥 2. 윈도우 리사이즈
+  useEffect(() => {
+    const handleResize = () => setWindowWidth(window.innerWidth);
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const isMobile = windowWidth <= 768;
+
+  // 🔥 3. Firebase에서 데이터 불러오기
+  const loadStocks = async () => {
+    if (!user) return;
+
+    try {
+      const q = query(collection(db, `users/${user.uid}/stocks`), orderBy('createdAt', 'desc'));
+      const querySnapshot = await getDocs(q);
+      const loadedStocks = [];
+      querySnapshot.forEach((document) => {
+        loadedStocks.push({ 
+          id: document.id, 
+          ...document.data() 
+        });
+      });
+      setStocks(loadedStocks);
+      console.log('✅ 내 종목 로드:', loadedStocks.length, '개');
+    } catch (error) {
+      console.error('❌ 데이터 로드 실패:', error);
     }
-  } catch (error) {
-    console.error('❌ 환율 API 오류:', error);
-    console.log('기본값 사용:', exchangeRate);
-  }
-};
+  };
 
-  // 🔥 실시간 주가 가져오기
+  // 🔥 4. 실시간 환율
+  const fetchExchangeRate = async () => {
+    try {
+      const url = 'https://api.exchangerate-api.com/v4/latest/USD';
+      console.log('🔄 환율 API 호출 중...');
+      
+      const response = await fetch(url);
+      const data = await response.json();
+      
+      if (data && data.rates && data.rates.KRW) {
+        const rate = data.rates.KRW;
+        setExchangeRate(rate);
+        setExchangeUpdateTime(new Date().toLocaleTimeString('ko-KR'));
+        console.log('✅ 환율 업데이트:', rate.toFixed(2), '원/USD');
+      }
+    } catch (error) {
+      console.error('❌ 환율 API 오류:', error);
+    }
+  };
+
+  // 🔥 5. 실시간 주가
   const fetchStockPrice = async (ticker) => {
     try {
       const API_KEY = process.env.REACT_APP_FINNHUB_API_KEY;
       
       if (!API_KEY) {
-        console.log('⚠️ Finnhub API 키가 없습니다. .env 파일을 확인하세요.');
+        console.log('⚠️ Finnhub API 키가 없습니다.');
         return null;
       }
 
       const url = `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${API_KEY}`;
-      
-      console.log('🔄 주가 조회 중:', ticker);
-      
       const response = await fetch(url);
       const data = await response.json();
       
       if (data.c && data.c > 0) {
         console.log('✅ 주가:', ticker, '=', data.c);
         return data.c;
-      } else {
-        console.log('⚠️ 주가 데이터 없음:', ticker);
-        return null;
       }
+      return null;
     } catch (error) {
       console.error('❌ 주가 API 오류:', ticker, error);
       return null;
     }
   };
 
-  //사용자 인증 체크
+  // 🔥 6. 사용자 로그인 후 데이터 로드
   useEffect(() => {
-  const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
-    if (currentUser) {
-      console.log('✅ 사용자 ID:', currentUser.uid);
-      setUser(currentUser);
-    }
-    setLoading(false);
-  });
+    if (!user) return;
+    loadStocks();
+  }, [user]);
 
-  return () => unsubscribe();
-}, []);
-
-
-  // 앱 시작 시 실행
-// 🔥 사용자 로그인 후 데이터 로드
-useEffect(() => {
-  if (!user) return;  // 🔥 추가
-  
-  loadStocks();
-}, [user]);  // 🔥 의존성 변경: [] → [user]
-
-// 환율은 별도로 (사용자 무관)
-useEffect(() => {
-  fetchExchangeRate();
-  
-  // 10분마다 환율 업데이트
-  const interval = setInterval(fetchExchangeRate, 10 * 60 * 1000);
-  return () => clearInterval(interval);
-}, []);
-
+  // 🔥 7. 환율 업데이트 (사용자 무관)
+  useEffect(() => {
+    fetchExchangeRate();
+    const interval = setInterval(fetchExchangeRate, 10 * 60 * 1000);
+    return () => clearInterval(interval);
+  }, []);
 
   const menuItems = [
     { name: '포트폴리오', icon: '📊' },
     { name: '배당 캘린더', icon: '📅' },
     { name: '종목별 배당', icon: '💵' },
     { name: '세금 계산기', icon: '💸' },
-    { name: '목표 달성률', icon: '🎯' },  // 🔥 새로 추가
-    { name: '배당 뉴스', icon: '📰' },   // 🔥 새로 추가
-    { name: '인기 배당주', icon: '🔥' },  // 🔥 새로 추가
-    { name: '투자 거장', icon: '👔' },   // 🔥 새로 추가
+    { name: '목표 달성률', icon: '🎯' },
+    { name: '배당 뉴스', icon: '📰' },
+    { name: '인기 배당주', icon: '🔥' },
+    { name: '투자 거장', icon: '👔' },
     { name: '설정', icon: '⚙️' },
-    { name: '정보', icon: 'ℹ️' }  // 🔥 새로 추가 (법적 페이지)
+    { name: '정보', icon: 'ℹ️' }
   ];
 
-// 🔥 로딩 중 화면 (새로 추가)
-if (loading) {
+  // 🔥 로딩 중
+  if (loading) {
+    return (
+      <div style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        height: '100vh',
+        background: '#f5f6fa'
+      }}>
+        <div style={{ textAlign: 'center' }}>
+          <h2 style={{ color: '#667eea' }}>💰</h2>
+          <p style={{ color: '#666' }}>로딩 중...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // 🔥 로그인 안 했으면
+  if (!user) {
+    return <LoginPage />;
+  }
+
+  // 🔥 로그인 했으면 앱 화면 (return은 하나만!)
   return (
-    <div style={{
-      display: 'flex',
-      justifyContent: 'center',
-      alignItems: 'center',
-      height: '100vh',
-      fontSize: '20px',
-      color: '#3498db'
-    }}>
-      ⏳ 로딩 중...
-    </div>
-  );
-}
-
-return (
-  <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', position: 'relative' }}>
-    
-    {/* 🔥 모바일 상단바 (768px 이하에서만 보임) */}
-   <div style={{
-  position: 'fixed',
-  top: 0,
-  left: 0,
-  right: 0,
-  height: '60px',
-  background: '#2c3e50',  // 🔥 배경색 추가
-  color: 'white',
-    display: isMobile ? 'flex' : 'none',
-  alignItems: 'center',
-  justifyContent: 'space-between',  // 🔥 양쪽 정렬
-  padding: '0 20px',
-  zIndex: 1000,
-  boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
-}}
-className="mobile-header">
-  <h1 style={{ 
-    margin: 0, 
-    fontSize: '18px', 
-    fontWeight: 'bold',
-    color: 'white'
-  }}>
-    💰 배당 포트폴리오
-  </h1>
-  <button
-    onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
-    style={{
-      background: 'none',
-      border: 'none',
-      color: 'white',
-      fontSize: '28px',
-      cursor: 'pointer',
-      padding: '5px',
-      lineHeight: 1
-    }}
-  >
-    {isMobileMenuOpen ? '✕' : '☰'}
-  </button>
-</div>
-
-    {/* 🔥 사이드바 (데스크톱 고정 / 모바일 토글) */}
-    
-  
-    <div 
-      style={{
-       width: '250px',
-    background: '#2c3e50',
-    color: 'white',
-    height: '100vh',
-    display: 'flex',
-    flexDirection: 'column',
-    position: isMobile ? 'fixed' : 'relative',     // 🔥 조건부
-    top: isMobile ? 0 : 'auto',                    // 🔥 조건부
-    left: isMobile ? 0 : 'auto',                   // 🔥 조건부
-    zIndex: 999,
-    transition: 'transform 0.3s ease',
-    transform: isMobile 
-      ? (isMobileMenuOpen ? 'translateX(0)' : 'translateX(-100%)') 
-      : 'none'                                     // 🔥 조건부
-  }}
-  className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}
-    >
-      <div style={{ padding: '30px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
-        <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold' }}>💰 배당 포트폴리오</h1>
-        <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#95a5a6' }}>
-          US Stocks & Bonds
-        </p>
+    <div style={{ display: 'flex', height: '100vh', overflow: 'hidden', position: 'relative' }}>
+      
+      {/* 모바일 헤더 */}
+      <div style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        height: '60px',
+        background: '#2c3e50',
+        color: 'white',
+        display: isMobile ? 'flex' : 'none',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        padding: '0 20px',
+        zIndex: 1000,
+        boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+      }}
+      className="mobile-header">
+        <h1 style={{ 
+          margin: 0, 
+          fontSize: '18px', 
+          fontWeight: 'bold',
+          color: 'white'
+        }}>
+          💰 배당 포트폴리오
+        </h1>
+        <button
+          onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+          style={{
+            background: 'none',
+            border: 'none',
+            color: 'white',
+            fontSize: '28px',
+            cursor: 'pointer',
+            padding: '5px',
+            lineHeight: 1
+          }}
+        >
+          {isMobileMenuOpen ? '✕' : '☰'}
+        </button>
       </div>
 
-      <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 0' }}>
-        {menuItems.map((item) => (
+      {/* 사이드바 */}
+      <div 
+        style={{
+          width: '250px',
+          background: '#2c3e50',
+          color: 'white',
+          height: '100vh',
+          display: 'flex',
+          flexDirection: 'column',
+          position: isMobile ? 'fixed' : 'relative',
+          top: isMobile ? 0 : 'auto',
+          left: isMobile ? 0 : 'auto',
+          zIndex: 999,
+          transition: 'transform 0.3s ease',
+          transform: isMobile 
+            ? (isMobileMenuOpen ? 'translateX(0)' : 'translateX(-100%)') 
+            : 'none'
+        }}
+        className={`sidebar ${isMobileMenuOpen ? 'open' : ''}`}
+      >
+        {/* 헤더 */}
+        <div style={{ padding: '30px 20px', borderBottom: '1px solid rgba(255,255,255,0.1)' }}>
+          <h1 style={{ margin: 0, fontSize: '20px', fontWeight: 'bold' }}>💰 배당 포트폴리오</h1>
+          <p style={{ margin: '8px 0 0 0', fontSize: '12px', color: '#95a5a6' }}>
+            US Stocks & Bonds
+          </p>
+        </div>
+
+        {/* 프로필 */}
+        {user && (
+          <div style={{
+            padding: '15px 20px',
+            borderBottom: '1px solid rgba(255,255,255,0.1)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '12px'
+          }}>
+            <img 
+              src={user.photoURL || 'https://via.placeholder.com/40'} 
+              alt="프로필"
+              style={{
+                width: '40px',
+                height: '40px',
+                borderRadius: '50%',
+                border: '2px solid rgba(255,255,255,0.2)'
+              }}
+            />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p style={{ 
+                margin: 0, 
+                fontSize: '14px', 
+                fontWeight: '600',
+                color: 'white',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                {user.displayName || '사용자'}
+              </p>
+              <p style={{ 
+                margin: '2px 0 0 0', 
+                fontSize: '11px', 
+                color: '#95a5a6',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap'
+              }}>
+                {user.email}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 메뉴 */}
+        <nav style={{ flex: 1, overflowY: 'auto', padding: '10px 0' }}>
+          {menuItems.map((item) => (
+            <button
+              key={item.name}
+              onClick={() => {
+                setCurrentPage(item.name);
+                setIsMobileMenuOpen(false);
+              }}
+              style={{
+                width: '100%',
+                padding: '15px 20px',
+                background: currentPage === item.name ? '#34495e' : 'transparent',
+                color: 'white',
+                border: 'none',
+                textAlign: 'left',
+                cursor: 'pointer',
+                fontSize: '15px',
+                transition: 'background 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '12px'
+              }}
+              onMouseEnter={(e) => {
+                if (currentPage !== item.name) {
+                  e.target.style.background = 'rgba(255,255,255,0.05)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (currentPage !== item.name) {
+                  e.target.style.background = 'transparent';
+                }
+              }}
+            >
+              <span style={{ fontSize: '20px' }}>{item.icon}</span>
+              <span>{item.name}</span>
+            </button>
+          ))}
+        </nav>
+
+        {/* 환율 */}
+        <div style={{ 
+          padding: '20px', 
+          borderTop: '1px solid rgba(255,255,255,0.1)',
+          fontSize: '12px',
+          color: '#95a5a6'
+        }}>
+          <p style={{ margin: '0 0 8px 0' }}>
+            💱 환율: ₩{exchangeRate.toFixed(2)}
+          </p>
+          {exchangeUpdateTime && (
+            <p style={{ margin: 0, fontSize: '11px' }}>
+              {exchangeUpdateTime} 업데이트
+            </p>
+          )}
+        </div>
+
+        {/* 로그아웃 */}
+        <div style={{ padding: '15px 20px' }}>
           <button
-            key={item.name}
-            onClick={() => {
-              setCurrentPage(item.name);
-              setIsMobileMenuOpen(false);  // 🔥 모바일에서 메뉴 닫기
+            onClick={async () => {
+              if (window.confirm('로그아웃 하시겠습니까?')) {
+                try {
+                  await signOut(auth);
+                } catch (error) {
+                  alert('로그아웃 실패: ' + error.message);
+                }
+              }
             }}
             style={{
               width: '100%',
-              padding: '15px 20px',
-              background: currentPage === item.name ? '#34495e' : 'transparent',
-              color: 'white',
-              border: 'none',
-              textAlign: 'left',
+              padding: '12px',
+              background: 'rgba(231, 76, 60, 0.1)',
+              color: '#e74c3c',
+              border: '1px solid rgba(231, 76, 60, 0.3)',
+              borderRadius: '8px',
               cursor: 'pointer',
-              fontSize: '15px',
-              transition: 'background 0.2s',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '12px'
+              fontSize: '14px',
+              fontWeight: '600',
+              transition: 'all 0.2s'
             }}
             onMouseEnter={(e) => {
-              if (currentPage !== item.name) {
-                e.target.style.background = 'rgba(255,255,255,0.05)';
-              }
+              e.target.style.background = '#e74c3c';
+              e.target.style.color = 'white';
             }}
             onMouseLeave={(e) => {
-              if (currentPage !== item.name) {
-                e.target.style.background = 'transparent';
-              }
+              e.target.style.background = 'rgba(231, 76, 60, 0.1)';
+              e.target.style.color = '#e74c3c';
             }}
           >
-            <span style={{ fontSize: '20px' }}>{item.icon}</span>
-            <span>{item.name}</span>
+            🚪 로그아웃
           </button>
-        ))}
-      </nav>
-
-      <div style={{ 
-        padding: '20px', 
-        borderTop: '1px solid rgba(255,255,255,0.1)',
-        fontSize: '12px',
-        color: '#95a5a6'
-      }}>
-        <p style={{ margin: '0 0 8px 0' }}>
-          💱 환율: ₩{exchangeRate.toFixed(2)}
-        </p>
-        {exchangeUpdateTime && (
-          <p style={{ margin: 0, fontSize: '11px' }}>
-            {exchangeUpdateTime} 업데이트
-          </p>
-        )}
+        </div>
       </div>
-    </div>
 
     {/* 🔥 모바일 오버레이 (메뉴 열렸을 때 배경 어둡게) */}
     {isMobileMenuOpen && (
@@ -367,7 +441,6 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
   const [couponRate, setCouponRate] = useState('');
   const [isValidating, setIsValidating] = useState(false);
   
-  // 🔥 반응형 state 추가
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
 
   useEffect(() => {
@@ -378,7 +451,19 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
 
   const isMobile = windowWidth <= 480;
 
-  // 🔥 티커 검증 함수 (강화)
+  // 🔥 자산 유형 변경 시 입력란 초기화
+  const handleAssetTypeChange = (type) => {
+    setAssetType(type);
+    // 타입 변경 시 모든 입력란 초기화
+    setTicker('');
+    setShares('');
+    setPurchasePrice('');
+    setDividendRate('');
+    setDividendMonths('');
+    setFaceValue('');
+    setCouponRate('');
+  };
+
   const validateTicker = async (ticker) => {
     try {
       const API_KEY = process.env.REACT_APP_FINNHUB_API_KEY;
@@ -389,7 +474,6 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
       }
 
       const url = `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${API_KEY}`;
-      
       console.log('🔍 티커 검증 중:', ticker);
       
       const response = await fetch(url);
@@ -400,7 +484,6 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
       }
 
       const data = await response.json();
-      
       console.log('API 응답:', data);
       
       if (data.c && data.c > 0) {
@@ -416,10 +499,22 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
     }
   };
 
-  // 🔥 종목 추가
   const addStock = async () => {
-    if (!ticker || !shares || !purchasePrice) {
+    // 공통 필수 항목
+    if (!ticker || !shares || !purchasePrice || !dividendMonths) {
       alert('필수 항목을 입력해주세요!');
+      return;
+    }
+
+    // 주식 필수 항목
+    if (assetType === '주식' && !dividendRate) {
+      alert('배당률을 입력해주세요!');
+      return;
+    }
+
+    // 채권 필수 항목
+    if (assetType === '채권' && (!couponRate || !faceValue)) {
+      alert('쿠폰률과 액면가를 입력해주세요!');
       return;
     }
 
@@ -469,11 +564,13 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
       
       setStocks([{ id: docRef.id, ...newStock }, ...stocks]);
       
+      // 초기화
       setTicker('');
       setShares('');
       setPurchasePrice('');
       setDividendRate('');
       setDividendMonths('');
+      setFaceValue('');
       setCouponRate('');
       
       alert(`✅ ${ticker.toUpperCase()} 추가 완료!\n현재가: $${currentPrice.toFixed(2)}`);
@@ -485,7 +582,6 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
     }
   };
 
-  // 🔥 종목 삭제
   const deleteStock = async (id) => {
     if (!window.confirm('정말 삭제하시겠습니까?')) return;
 
@@ -501,7 +597,6 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
     }
   };
 
-  // 🔥 개별 주가 업데이트
   const updateStockPrice = async (stockId, ticker) => {
     try {
       const API_KEY = process.env.REACT_APP_FINNHUB_API_KEY;
@@ -512,7 +607,6 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
       }
 
       const url = `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${API_KEY}`;
-      
       const response = await fetch(url);
       const data = await response.json();
       
@@ -541,7 +635,6 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
     }
   };
 
-  // 🔥 모든 주식 주가 업데이트
   const updateAllPrices = async () => {
     const stocksOnly = stocks.filter(s => s.assetType === '주식');
     
@@ -571,7 +664,6 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
     alert(`완료!\n성공: ${successCount}개\n실패: ${failCount}개`);
   };
 
-  // 🔥 채권 가격 수동 업데이트
   const updateBondPrice = async (stockId, newPrice) => {
     if (!newPrice || isNaN(newPrice)) {
       alert('올바른 가격을 입력해주세요.');
@@ -601,7 +693,6 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
     <div>
       <h1 style={{ margin: '0 0 30px 0', color: '#333' }}>내 포트폴리오</h1>
 
-      {/* 종목 추가 카드 */}
       <div style={{
         background: 'white',
         padding: isMobile ? '20px' : '30px',
@@ -611,14 +702,13 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
       }}>
         <h2 style={{ margin: '0 0 20px 0', color: '#667eea' }}>자산 추가</h2>
         
-        {/* 자산 유형 선택 */}
         <div style={{ marginBottom: '20px' }}>
           <label style={{ display: 'block', marginBottom: '10px', color: '#666', fontWeight: 'bold', fontSize: isMobile ? '13px' : '14px' }}>
             자산 유형
           </label>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
-              onClick={() => setAssetType('주식')}
+              onClick={() => handleAssetTypeChange('주식')} 
               style={{
                 flex: 1,
                 padding: isMobile ? '10px 15px' : '12px 30px',
@@ -635,7 +725,7 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
               📈 주식
             </button>
             <button
-              onClick={() => setAssetType('채권')}
+              onClick={() => handleAssetTypeChange('채권')} 
               style={{
                 flex: 1,
                 padding: isMobile ? '10px 15px' : '12px 30px',
@@ -653,7 +743,6 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
             </button>
           </div>
 
-          {/* 채권 안내 */}
           {assetType === '채권' && (
             <div style={{
               background: '#e8f4f8',
@@ -673,7 +762,7 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
           )}
         </div>
 
-        {/* 입력 폼 */}
+        {/* 입력 폼 - 나머지 코드 동일 */}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
           <div>
             <label style={{ display: 'block', marginBottom: '5px', color: '#666', fontSize: isMobile ? '12px' : '14px' }}>
