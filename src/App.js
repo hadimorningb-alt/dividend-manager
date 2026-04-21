@@ -13,12 +13,17 @@ import {
   setDoc
 } from 'firebase/firestore';
 import { onAuthStateChanged, signOut } from './firebase';
+import * as XLSX from 'xlsx';
+
 import LoginPage from './LoginPage';
+import DashboardPage from './DashboardPage';
+import ChartPage from './ChartPage';
+
 //import toast, { Toaster } from 'react-hot-toast';
 
 
 function App() {
-  const [currentPage, setCurrentPage] = useState('포트폴리오');
+  const [currentPage, setCurrentPage] = useState('대시보드');
   const [stocks, setStocks] = useState([]);
   const [exchangeRate, setExchangeRate] = useState(1380);
   const [exchangeUpdateTime, setExchangeUpdateTime] = useState('');
@@ -67,6 +72,47 @@ function App() {
       console.error('❌ 데이터 로드 실패:', error);
     }
   };
+
+  // 🔥 매달 스냅샷 자동 저장 (App.js에 추가)
+useEffect(() => {
+  const saveMonthlySnapshot = async () => {
+    if (!user || stocks.length === 0) return;
+    
+    const today = new Date();
+    const monthKey = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}`;
+    
+    // 총 연배당 계산
+    const totalAnnualDividend = stocks.reduce((sum, stock) => {
+      const annualDiv = stock.assetType === '주식'
+        ? stock.currentPrice * stock.shares * stock.dividendRate / 100
+        : stock.faceValue * stock.shares * stock.dividendRate / 100;
+      return sum + annualDiv;
+    }, 0);
+    
+    const monthlyDividend = totalAnnualDividend / 12;
+    
+    try {
+      // 🔥 Firestore에 스냅샷 저장
+      await setDoc(doc(db, `users/${user.uid}/snapshots`, monthKey), {
+        totalAnnualDividend,
+        monthlyDividend,
+        stockCount: stocks.length,
+        timestamp: new Date(),
+        month: monthKey
+      }, { merge: true });  // merge: 기존 데이터 덮어쓰기
+      
+      console.log('✅ 스냅샷 저장:', monthKey);
+    } catch (error) {
+      console.error('❌ 스냅샷 저장 실패:', error);
+    }
+  };
+  
+  // 종목이 추가/수정/삭제될 때마다 저장
+  if (stocks.length > 0) {
+    saveMonthlySnapshot();
+  }
+}, [stocks, user]);  // stocks 변경 시 자동 저장
+
 
   // 🔥 4. 실시간 환율
   const fetchExchangeRate = async () => {
@@ -127,16 +173,18 @@ function App() {
   }, []);
 
   const menuItems = [
-    { name: '포트폴리오', icon: '📊' },
-    { name: '배당 캘린더', icon: '📅' },
-    { name: '종목별 배당', icon: '💵' },
-    { name: '세금 계산기', icon: '💸' },
-    { name: '목표 달성률', icon: '🎯' },
-    { name: '배당 뉴스', icon: '📰' },
-    { name: '인기 배당주', icon: '🔥' },
-    { name: '투자 거장', icon: '👔' },
-    { name: '설정', icon: '⚙️' },
-    { name: '정보', icon: 'ℹ️' }
+    { name: '대시보드', icon: 'fa-brands fa-dashcube' },
+    { name: '포트폴리오', icon: 'fa-solid fa-file-pen' },
+    { name: '배당 캘린더', icon: 'fa-regular fa-calendar-days' },
+    { name: '종목별 배당', icon: 'fa-solid fa-circle-dollar-to-slot' },     
+    { name: '목표 달성률', icon: 'fa-solid fa-ranking-star' },
+    { name: '차트 분석', icon: 'fa-solid fa-chart-line' },
+    { name: '세금 계산기', icon: 'fa-solid fa-calculator' },
+    { name: '인기 배당주', icon: 'fa-solid fa-egg' },
+    { name: '투자 거장', icon: 'fa-solid fa-user-tie' },
+    { name: '배당 뉴스', icon: 'fa-solid fa-newspaper' },
+    { name: '설정', icon: 'fa-solid fa-gear' },
+    { name: '정보', icon: 'fa-solid fa-circle-info' }
   ];
 
   // 🔥 로딩 중
@@ -314,7 +362,17 @@ function App() {
                 }
               }}
             >
-              <span style={{ fontSize: '20px' }}>{item.icon}</span>
+               {/* 🔥 아이콘 (Font Awesome) */}
+  <i 
+    className={item.icon}
+    style={{ 
+      fontSize: '16px',
+      width: '18px',
+      textAlign: 'center'
+    }}
+  ></i>
+  
+  {/* 🔥 메뉴 이름 */}
               <span>{item.name}</span>
             </button>
           ))}
@@ -403,6 +461,7 @@ function App() {
 
     }}
     className="main-content">
+     {currentPage === '대시보드' && <DashboardPage stocks={stocks} user={user} exchangeRate={exchangeRate} />}
       {currentPage === '포트폴리오' && (
         <PortfolioPage 
           stocks={stocks} 
@@ -413,6 +472,7 @@ function App() {
           user={user}
         />
       )}
+      {currentPage === '차트 분석' && <ChartPage stocks={stocks} exchangeRate={exchangeRate} />} 
       {currentPage === '배당 캘린더' && <CalendarPage stocks={stocks} />}
       {currentPage === '종목별 배당' && <StockDividendPage stocks={stocks} />}
       {currentPage === '세금 계산기' && <TaxCalculatorPage exchangeRate={exchangeRate} />}
@@ -499,12 +559,100 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
     }
   };
 
+
+  // 🔥 CSV 내보내기 함수
+const exportToCSV = () => {
+  if (stocks.length === 0) {
+    alert('내보낼 데이터가 없습니다!');
+    return;
+  }
+
+  // 데이터 가공
+  const exportData = stocks.map(stock => {
+    const totalInvestment = stock.purchasePrice * stock.shares;
+    const currentValue = stock.currentPrice * stock.shares;
+    const unrealizedGain = currentValue - totalInvestment;
+    const profitRate = ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice * 100).toFixed(2);
+    
+    // 연간 배당액
+    const annualDividend = stock.assetType === '주식'
+      ? stock.currentPrice * stock.shares * stock.dividendRate / 100
+      : stock.faceValue * stock.shares * stock.dividendRate / 100;
+    
+    // 15% 원천징수세
+    const withholdingTax = annualDividend * 0.15;
+    const netDividend = annualDividend - withholdingTax;
+
+    return {
+      '자산유형': stock.assetType,
+      '티커': stock.ticker,
+      '수량': stock.shares,
+      '매수가(USD)': stock.purchasePrice.toFixed(2),
+      '현재가(USD)': stock.currentPrice.toFixed(2),
+      '총투자금(USD)': totalInvestment.toFixed(2),
+      '현재가치(USD)': currentValue.toFixed(2),
+      '평가손익(USD)': unrealizedGain.toFixed(2),
+      '수익률(%)': profitRate,
+      '배당률(%)': stock.dividendRate,
+      '배당지급월': stock.dividendMonths || '-',
+      '연배당액(USD)': annualDividend.toFixed(2),
+      '원천징수세_15%(USD)': withholdingTax.toFixed(2),
+      '순수령액(USD)': netDividend.toFixed(2)
+    };
+  });
+
+  // 워크시트 생성
+  const ws = XLSX.utils.json_to_sheet(exportData);
+  
+  // 열 너비 자동 조정
+  const colWidths = [
+    { wch: 10 }, // 자산유형
+    { wch: 10 }, // 티커
+    { wch: 8 },  // 수량
+    { wch: 12 }, // 매수가
+    { wch: 12 }, // 현재가
+    { wch: 14 }, // 총투자금
+    { wch: 14 }, // 현재가치
+    { wch: 14 }, // 평가손익
+    { wch: 10 }, // 수익률
+    { wch: 10 }, // 배당률
+    { wch: 14 }, // 배당지급월
+    { wch: 14 }, // 연배당액
+    { wch: 18 }, // 원천징수세
+    { wch: 14 }  // 순수령액
+  ];
+  ws['!cols'] = colWidths;
+
+  // 워크북 생성
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '포트폴리오');
+
+  // 파일명 (날짜 포함)
+  const today = new Date().toISOString().split('T')[0]; // 2026-04-20
+  const fileName = `배당포트폴리오_${today}.xlsx`;
+
+  // 다운로드
+  XLSX.writeFile(wb, fileName);
+  
+  console.log('✅ CSV 내보내기 완료:', fileName);
+};
+
   const addStock = async () => {
     // 공통 필수 항목
     if (!ticker || !shares || !purchasePrice || !dividendMonths) {
       alert('필수 항목을 입력해주세요!');
       return;
     }
+
+     // 🔥 중복 티커 검증
+  const isDuplicate = stocks.some(
+    stock => stock.ticker.toUpperCase() === ticker.toUpperCase()
+  );
+
+  if (isDuplicate) {
+    alert(`❌ "${ticker.toUpperCase()}"는 이미 포트폴리오에 있습니다!\n\n기존 종목을 수정하거나 삭제 후 다시 추가해주세요.`);
+    return;
+  }
 
     // 주식 필수 항목
     if (assetType === '주식' && !dividendRate) {
@@ -974,39 +1122,70 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
         boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
       }}>
         <div style={{ 
-          display: 'flex', 
-          flexDirection: isMobile ? 'column' : 'row',
-          justifyContent: 'space-between', 
-          alignItems: isMobile ? 'flex-start' : 'center', 
-          marginBottom: '20px',
-          gap: isMobile ? '10px' : '0'
-        }}>
-          <h2 style={{ margin: 0, color: '#667eea', fontSize: isMobile ? '18px' : '24px' }}>
-            보유 자산 ({stocks.length})
-          </h2>
-          
-          {stocks.filter(s => s.assetType === '주식').length > 0 && (
-            <button
-              onClick={updateAllPrices}
-              style={{
-                padding: isMobile ? '10px 16px' : '12px 24px',
-                background: '#4caf50',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: isMobile ? '12px' : '14px',
-                fontWeight: 'bold',
-                cursor: 'pointer',
-                transition: 'all 0.3s',
-                whiteSpace: 'nowrap'
-              }}
-              onMouseEnter={(e) => e.target.style.background = '#45a049'}
-              onMouseLeave={(e) => e.target.style.background = '#4caf50'}
-            >
-              {isMobile ? '📊 업데이트' : '📊 모든 종목 업데이트'}
-            </button>
-          )}
-        </div>
+  display: 'flex', 
+  flexDirection: isMobile ? 'column' : 'row',
+  justifyContent: 'space-between', 
+  alignItems: isMobile ? 'flex-start' : 'center', 
+  marginBottom: '20px',
+  gap: isMobile ? '10px' : '12px'
+}}>
+  <h2 style={{ margin: 0, color: '#667eea', fontSize: isMobile ? '18px' : '24px' }}>
+    보유 자산 ({stocks.length})
+  </h2>
+  
+  {/* 🔥 버튼 그룹 */}
+  <div style={{ 
+    display: 'flex', 
+    gap: '10px',
+    width: isMobile ? '100%' : 'auto'
+  }}>
+    {/* CSV 다운로드 버튼 */}
+    <button
+      onClick={exportToCSV}
+      style={{
+        flex: isMobile ? 1 : 'none',
+        padding: isMobile ? '10px 16px' : '12px 24px',
+        background: '#667eea',
+        color: 'white',
+        border: 'none',
+        borderRadius: '8px',
+        fontSize: isMobile ? '12px' : '14px',
+        fontWeight: 'bold',
+        cursor: 'pointer',
+        transition: 'all 0.3s',
+        whiteSpace: 'nowrap'
+      }}
+      onMouseEnter={(e) => e.target.style.background = '#5568d3'}
+      onMouseLeave={(e) => e.target.style.background = '#667eea'}
+    >
+      {isMobile ? '📥 CSV' : '📥 CSV 다운로드'}
+    </button>
+
+    {/* 주가 업데이트 버튼 */}
+    {stocks.filter(s => s.assetType === '주식').length > 0 && (
+      <button
+        onClick={updateAllPrices}
+        style={{
+          flex: isMobile ? 1 : 'none',
+          padding: isMobile ? '10px 16px' : '12px 24px',
+          background: '#4caf50',
+          color: 'white',
+          border: 'none',
+          borderRadius: '8px',
+          fontSize: isMobile ? '12px' : '14px',
+          fontWeight: 'bold',
+          cursor: 'pointer',
+          transition: 'all 0.3s',
+          whiteSpace: 'nowrap'
+        }}
+        onMouseEnter={(e) => e.target.style.background = '#45a049'}
+        onMouseLeave={(e) => e.target.style.background = '#4caf50'}
+      >
+        {isMobile ? '📊 업데이트' : '📊 모든 종목 업데이트'}
+      </button>
+    )}
+  </div>
+</div>
 
         {stocks.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
@@ -1130,7 +1309,7 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
                               fontWeight: '600'
                             }}
                           >
-                            🔄 갱신
+                            <i className='fa-solid fa-arrow-rotate'></i> 갱신
                           </button>
                         ) : (
                           <button
@@ -1152,7 +1331,7 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
                               fontWeight: '600'
                             }}
                           >
-                            ✏️ 수정
+                            <i className='fa-solid fa-pen-clip'></i> 수정
                           </button>
                         )}
                         <button
@@ -1384,7 +1563,7 @@ function CalendarPage({ stocks }) {
             >
               <h3 style={{ margin: '0 0 15px 0', color: '#667eea' }}>{month}월</h3>
               <p style={{ fontSize: '40px', margin: '10px 0' }}>
-                {monthStocks.length > 0 ? '💰' : ' '}
+                {monthStocks.length > 0 ? <i className="fa-solid fa-piggy-bank"></i> : ' '}
               </p>
               <p style={{ color: monthStocks.length > 0 ? '#4caf50' : '#999', fontSize: '14px', margin: '5px 0', fontWeight: 'bold' }}>
                 ${totalDividend.toFixed(0)}
@@ -1487,7 +1666,7 @@ className="dividend-months-grid">
                   className="month-box">  {/* 🔥 className 추가 */}
                     <p style={{ margin: 0, fontSize: '12px', color: '#666' }}>{month}월</p>
                     <p style={{ margin: '5px 0 0 0', fontSize: '20px' }}>
-                      {hasDividend ? '💰' : '-'}
+                      {hasDividend ? <i className="fa-solid fa-circle-dollar-to-slot"></i> : '-'}
                     </p>
                   </div>
                 );
@@ -1543,7 +1722,7 @@ function TaxCalculatorPage({ exchangeRate }) {
           gap: '8px',
           flexWrap: 'wrap'  // 🔥 필요시 줄바꿈
         }}>
-          <span>💱 실시간 환율</span>
+          <span> 실시간 환율</span>
           <span style={{ fontSize: isMobile ? '10px' : '12px' }}>
             {new Date().toLocaleDateString('ko-KR')}
           </span>
@@ -1572,7 +1751,7 @@ function TaxCalculatorPage({ exchangeRate }) {
           fontSize: isMobile ? '16px' : '18px',
           fontWeight: 'bold'
         }}>
-          💵 배당금 입력 (달러)
+          배당금 입력 (달러)
         </label>
         <input 
           type="number"
@@ -1667,7 +1846,7 @@ function TaxCalculatorPage({ exchangeRate }) {
           fontSize: isMobile ? '14px' : '16px',
           opacity: 0.9 
         }}>
-          💰 실제 수령액
+         실제 수령액
         </p>
         <p style={{ 
           margin: '15px 0', 
@@ -1829,7 +2008,7 @@ function GoalTrackerPage({ stocks }) {
                 fontSize: isMobile ? '13px' : '14px'
               }}
             >
-              ✏️ 수정
+              <i className="fa-regular fa-pen-to-square"></i> 수정
             </button>
           </div>
         )}
@@ -2532,7 +2711,7 @@ function PopularDividendStocksPage() {
       <div style={{ marginBottom: '30px' }}>
         <h1 style={{ margin: '0 0 5px 0', color: '#2c3e50' }}>인기 배당주 TOP 30</h1>
         <p style={{ margin: 0, fontSize: '13px', color: '#95a5a6' }}>
-          📅 데이터 기준: 2026년 4월 10일
+          <i className='fa-solid fa-calendar-check'></i> 데이터 기준: 2026년 4월 10일
         </p>
       </div>
 
@@ -3214,11 +3393,11 @@ function SettingsPage({user}) {
           onMouseEnter={(e) => e.target.style.background = '#e84118'}
           onMouseLeave={(e) => e.target.style.background = '#ff4757'}
         >
-          🗑️ 모든 데이터 삭제
+          <i className="fa-solid fa-trash-can" style={{ fontSize: '16px' }}></i> 모든 데이터 삭제
         </button>
         
         <p style={{ marginTop: '15px', color: '#999', fontSize: '14px' }}>
-          ⚠️ 이 작업은 되돌릴 수 없습니다.
+           <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: '14px' }}></i>이 작업은 되돌릴 수 없습니다.
         </p>
       </div>
     </div>
