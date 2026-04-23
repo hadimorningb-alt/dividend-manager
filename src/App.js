@@ -491,6 +491,7 @@ useEffect(() => {
 // 📊 포트폴리오 페이지
 // ============================================
 function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
+  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [assetType, setAssetType] = useState('주식');
   const [ticker, setTicker] = useState('');
   const [shares, setShares] = useState('');
@@ -498,10 +499,12 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
   const [dividendRate, setDividendRate] = useState('');
   const [dividendMonths, setDividendMonths] = useState('');
   const [faceValue, setFaceValue] = useState('');
-  const [couponRate, setCouponRate] = useState('');
-  const [isValidating, setIsValidating] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [updatingAll, setUpdatingAll] = useState(false);
   
-  const [windowWidth, setWindowWidth] = useState(window.innerWidth);
+  // 수정 모드 state
+  const [editingStock, setEditingStock] = useState(null);
+  const [isEditMode, setIsEditMode] = useState(false);
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -511,336 +514,268 @@ function PortfolioPage({ stocks, setStocks, fetchStockPrice, user }) {
 
   const isMobile = windowWidth <= 480;
 
-  // 🔥 자산 유형 변경 시 입력란 초기화
-  const handleAssetTypeChange = (type) => {
-    setAssetType(type);
-    // 타입 변경 시 모든 입력란 초기화
+  // 폼 초기화
+  const resetForm = () => {
     setTicker('');
     setShares('');
     setPurchasePrice('');
     setDividendRate('');
     setDividendMonths('');
     setFaceValue('');
-    setCouponRate('');
+    setEditingStock(null);
+    setIsEditMode(false);
   };
 
-  const validateTicker = async (ticker) => {
-    try {
-      const API_KEY = process.env.REACT_APP_FINNHUB_API_KEY;
-      
-      if (!API_KEY) {
-        console.log('⚠️ API 키 없음, 검증 생략');
-        return { valid: true, price: null };
-      }
+  // 수정 모드 활성화
+  const handleEdit = (stock) => {
+    setIsEditMode(true);
+    setEditingStock(stock);
+    setAssetType(stock.assetType);
+    setTicker(stock.ticker);
+    setShares(stock.shares.toString());
+    setPurchasePrice(stock.purchasePrice.toString());
+    setDividendRate(stock.dividendRate.toString());
+    setDividendMonths(stock.dividendMonths || '');
+    setFaceValue(stock.faceValue ? stock.faceValue.toString() : '');
 
-      const url = `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${API_KEY}`;
-      console.log('🔍 티커 검증 중:', ticker);
-      
-      const response = await fetch(url);
-      
-      if (!response.ok) {
-        console.log('❌ API 응답 오류');
-        return { valid: false, price: null };
-      }
-
-      const data = await response.json();
-      console.log('API 응답:', data);
-      
-      if (data.c && data.c > 0) {
-        console.log('✅ 유효한 티커:', ticker, '현재가:', data.c);
-        return { valid: true, price: data.c };
-      } else {
-        console.log('❌ 존재하지 않는 티커:', ticker, '데이터:', data);
-        return { valid: false, price: null };
-      }
-    } catch (error) {
-      console.error('❌ 티커 검증 오류:', error);
-      return { valid: false, price: null };
-    }
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-
-  // 🔥 CSV 내보내기 함수
-const exportToCSV = () => {
-  if (stocks.length === 0) {
-    alert('내보낼 데이터가 없습니다!');
-    return;
-  }
-
-  // 데이터 가공
-  const exportData = stocks.map(stock => {
-    const totalInvestment = stock.purchasePrice * stock.shares;
-    const currentValue = stock.currentPrice * stock.shares;
-    const unrealizedGain = currentValue - totalInvestment;
-    const profitRate = ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice * 100).toFixed(2);
-    
-    // 연간 배당액
-    const annualDividend = stock.assetType === '주식'
-      ? stock.currentPrice * stock.shares * stock.dividendRate / 100
-      : stock.faceValue * stock.shares * stock.dividendRate / 100;
-    
-    // 15% 원천징수세
-    const withholdingTax = annualDividend * 0.15;
-    const netDividend = annualDividend - withholdingTax;
-
-    return {
-      '자산유형': stock.assetType,
-      '티커': stock.ticker,
-      '수량': stock.shares,
-      '매수가(USD)': stock.purchasePrice.toFixed(2),
-      '현재가(USD)': stock.currentPrice.toFixed(2),
-      '총투자금(USD)': totalInvestment.toFixed(2),
-      '현재가치(USD)': currentValue.toFixed(2),
-      '평가손익(USD)': unrealizedGain.toFixed(2),
-      '수익률(%)': profitRate,
-      '배당률(%)': stock.dividendRate,
-      '배당지급월': stock.dividendMonths || '-',
-      '연배당액(USD)': annualDividend.toFixed(2),
-      '원천징수세_15%(USD)': withholdingTax.toFixed(2),
-      '순수령액(USD)': netDividend.toFixed(2)
-    };
-  });
-
-  // 워크시트 생성
-  const ws = XLSX.utils.json_to_sheet(exportData);
-  
-  // 열 너비 자동 조정
-  const colWidths = [
-    { wch: 10 }, // 자산유형
-    { wch: 10 }, // 티커
-    { wch: 8 },  // 수량
-    { wch: 12 }, // 매수가
-    { wch: 12 }, // 현재가
-    { wch: 14 }, // 총투자금
-    { wch: 14 }, // 현재가치
-    { wch: 14 }, // 평가손익
-    { wch: 10 }, // 수익률
-    { wch: 10 }, // 배당률
-    { wch: 14 }, // 배당지급월
-    { wch: 14 }, // 연배당액
-    { wch: 18 }, // 원천징수세
-    { wch: 14 }  // 순수령액
-  ];
-  ws['!cols'] = colWidths;
-
-  // 워크북 생성
-  const wb = XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb, ws, '포트폴리오');
-
-  // 파일명 (날짜 포함)
-  const today = new Date().toISOString().split('T')[0]; // 2026-04-20
-  const fileName = `배당포트폴리오_${today}.xlsx`;
-
-  // 다운로드
-  XLSX.writeFile(wb, fileName);
-  
-  console.log('✅ CSV 내보내기 완료:', fileName);
-};
-
-  const addStock = async () => {
-    // 공통 필수 항목
-    if (!ticker || !shares || !purchasePrice || !dividendMonths) {
-      alert('필수 항목을 입력해주세요!');
+  // 종목 추가/수정
+  const handleAddOrUpdateStock = async () => {
+    if (!ticker || !shares || !purchasePrice || !dividendRate || !dividendMonths) {
+      alert('모든 필드를 입력해주세요.');
       return;
     }
 
-     // 🔥 중복 티커 검증
-  const isDuplicate = stocks.some(
-    stock => stock.ticker.toUpperCase() === ticker.toUpperCase()
-  );
-
-  if (isDuplicate) {
-    alert(`❌ "${ticker.toUpperCase()}"는 이미 포트폴리오에 있습니다!\n\n기존 종목을 수정하거나 삭제 후 다시 추가해주세요.`);
-    return;
-  }
-
-    // 주식 필수 항목
-    if (assetType === '주식' && !dividendRate) {
-      alert('배당률을 입력해주세요!');
+    if (assetType === '채권' && !faceValue) {
+      alert('채권의 액면가를 입력해주세요.');
       return;
     }
 
-    // 채권 필수 항목
-    if (assetType === '채권' && (!couponRate || !faceValue)) {
-      alert('쿠폰률과 액면가를 입력해주세요!');
-      return;
-    }
-
-    setIsValidating(true);
+    setLoading(true);
 
     try {
       let currentPrice = parseFloat(purchasePrice);
-      
+
+      // 주식인 경우에만 실시간 가격 조회
       if (assetType === '주식') {
-        console.log('🔍 주식 티커 검증 시작:', ticker.toUpperCase());
-        
-        const validation = await validateTicker(ticker.toUpperCase());
-        
-        if (!validation.valid) {
-          alert(`❌ "${ticker.toUpperCase()}"는 존재하지 않는 주식 종목입니다!\n\n올바른 티커를 입력해주세요.\n\n예시: AAPL, MSFT, GOOGL, KO, JNJ`);
-          setIsValidating(false);
+        const validationPrice = await fetchStockPrice(ticker);
+        if (validationPrice === null) {
+          alert(`❌ "${ticker}" 티커를 찾을 수 없습니다.\n올바른 티커를 입력해주세요.`);
+          setLoading(false);
           return;
         }
-        
-        if (validation.price) {
-          currentPrice = validation.price;
-          console.log('✅ 실시간 주가 적용:', currentPrice);
-        }
-      } else if (assetType === '채권') {
-        console.log('📜 채권: 매수가를 현재가로 설정');
-        currentPrice = parseFloat(purchasePrice);
+        currentPrice = validationPrice;
       }
 
-      const newStock = {
+      const stockData = {
         assetType,
         ticker: ticker.toUpperCase(),
-        shares: Number(shares),
+        shares: parseFloat(shares),
         purchasePrice: parseFloat(purchasePrice),
         currentPrice,
-        dividendRate: assetType === '주식' ? parseFloat(dividendRate || 0) : parseFloat(couponRate || 0),
+        dividendRate: parseFloat(dividendRate),
         dividendMonths,
         faceValue: assetType === '채권' ? parseFloat(faceValue) : null,
-        createdAt: new Date(),
         lastUpdated: new Date()
       };
 
-      await deleteDoc(doc(db, 'cache', 'dividendData'));
-      console.log('캐시 삭제 완료!');
+      // 수정 모드인 경우
+      if (isEditMode && editingStock) {
+        stockData.id = editingStock.id;
+        stockData.createdAt = editingStock.createdAt;
 
-      const docRef = await addDoc(collection(db, `users/${user.uid}/stocks`), newStock);
-      console.log('✅ Firebase에 저장 완료! ID:', docRef.id);
-      
-      setStocks([{ id: docRef.id, ...newStock }, ...stocks]);
-      
-      // 초기화
-      setTicker('');
-      setShares('');
-      setPurchasePrice('');
-      setDividendRate('');
-      setDividendMonths('');
-      setFaceValue('');
-      setCouponRate('');
-      
-      alert(`✅ ${ticker.toUpperCase()} 추가 완료!\n현재가: $${currentPrice.toFixed(2)}`);
+        await setDoc(doc(db, `users/${user.uid}/stocks`, editingStock.id), stockData);
+        setStocks(stocks.map(s => s.id === editingStock.id ? { ...stockData, id: editingStock.id } : s));
+
+        alert(`✅ ${ticker.toUpperCase()} 종목이 수정되었습니다!`);
+      } 
+      // 신규 추가 모드
+      else {
+        const isDuplicate = stocks.some(s => s.ticker === ticker.toUpperCase());
+        if (isDuplicate) {
+          alert(`❌ ${ticker.toUpperCase()}는 이미 포트폴리오에 있습니다.\n수정하려면 "수정" 버튼을 클릭하세요.`);
+          setLoading(false);
+          return;
+        }
+
+        const newId = `${ticker.toUpperCase()}_${Date.now()}`;
+        stockData.id = newId;
+        stockData.createdAt = new Date();
+
+        await setDoc(doc(db, `users/${user.uid}/stocks`, newId), stockData);
+        setStocks([...stocks, { ...stockData, id: newId }]);
+
+        alert(`✅ ${ticker.toUpperCase()} 종목이 추가되었습니다!`);
+      }
+
+      resetForm();
     } catch (error) {
       console.error('❌ 저장 실패:', error);
-      alert('저장 중 오류가 발생했습니다: ' + error.message);
+      alert('저장 중 오류가 발생했습니다.');
     } finally {
-      setIsValidating(false);
+      setLoading(false);
     }
   };
 
-  const deleteStock = async (id) => {
-    if (!window.confirm('정말 삭제하시겠습니까?')) return;
+  // 🔥 모든 주식 가격 일괄 업데이트
+  const handleUpdateAllPrices = async () => {
+    const stocksToUpdate = stocks.filter(s => s.assetType === '주식');
+    
+    if (stocksToUpdate.length === 0) {
+      alert('업데이트할 주식이 없습니다.');
+      return;
+    }
+
+    const confirmed = window.confirm(
+      `${stocksToUpdate.length}개 주식의 가격을 업데이트하시겠습니까?\n\n` +
+      `종목: ${stocksToUpdate.map(s => s.ticker).join(', ')}`
+    );
+    
+    if (!confirmed) return;
+
+    setUpdatingAll(true);
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const stock of stocksToUpdate) {
+      try {
+        const newPrice = await fetchStockPrice(stock.ticker);
+        if (newPrice !== null) {
+          const updatedStock = { ...stock, currentPrice: newPrice, lastUpdated: new Date() };
+          await setDoc(doc(db, `users/${user.uid}/stocks`, stock.id), updatedStock);
+          
+          setStocks(prevStocks => 
+            prevStocks.map(s => s.id === stock.id ? updatedStock : s)
+          );
+          
+          successCount++;
+        } else {
+          failCount++;
+        }
+        
+        // API 호출 제한 방지 (1초 대기)
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error(`${stock.ticker} 업데이트 실패:`, error);
+        failCount++;
+      }
+    }
+
+    setUpdatingAll(false);
+    alert(
+      `✅ 업데이트 완료!\n\n` +
+      `성공: ${successCount}개\n` +
+      `실패: ${failCount}개`
+    );
+  };
+
+  // 주가 갱신 (개별)
+  const handleRefreshPrice = async (stock) => {
+    if (stock.assetType !== '주식') return;
 
     try {
-      await deleteDoc(doc(db, `users/${user.uid}/stocks`, id));
-      console.log('✅ Firebase에서 삭제 완료! ID:', id);
-      
-      setStocks(stocks.filter(stock => stock.id !== id));
-      alert('✅ 종목이 삭제되었습니다!');
+      const newPrice = await fetchStockPrice(stock.ticker);
+      if (newPrice === null) {
+        alert('가격 조회 실패');
+        return;
+      }
+
+      const updatedStock = { ...stock, currentPrice: newPrice, lastUpdated: new Date() };
+      await setDoc(doc(db, `users/${user.uid}/stocks`, stock.id), updatedStock);
+
+      setStocks(stocks.map(s => s.id === stock.id ? updatedStock : s));
+      alert(`✅ ${stock.ticker} 가격이 업데이트되었습니다: $${newPrice.toFixed(2)}`);
     } catch (error) {
-      console.error('❌ 삭제 실패:', error);
+      console.error('가격 갱신 실패:', error);
+      alert('가격 갱신 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 종목 삭제
+  const handleDeleteStock = async (stockId) => {
+    const confirmed = window.confirm('정말 이 종목을 삭제하시겠습니까?');
+    if (!confirmed) return;
+
+    try {
+      await deleteDoc(doc(db, `users/${user.uid}/stocks`, stockId));
+      setStocks(stocks.filter(s => s.id !== stockId));
+      alert('✅ 종목이 삭제되었습니다.');
+    } catch (error) {
+      console.error('삭제 실패:', error);
       alert('삭제 중 오류가 발생했습니다.');
     }
   };
 
-  const updateStockPrice = async (stockId, ticker) => {
-    try {
-      const API_KEY = process.env.REACT_APP_FINNHUB_API_KEY;
-      
-      if (!API_KEY) {
-        alert('Finnhub API 키가 설정되지 않았습니다.');
-        return;
-      }
+  // CSV/Excel 내보내기
+  const handleExport = () => {
+    const exportData = stocks.map(stock => ({
+      '자산유형': stock.assetType,
+      '티커': stock.ticker,
+      '수량': stock.shares,
+      '매수가': stock.purchasePrice,
+      '현재가': stock.currentPrice,
+      '배당률': stock.dividendRate + '%',
+      '배당월': stock.dividendMonths,
+      '액면가': stock.faceValue || '-',
+      '평가액': (stock.currentPrice * stock.shares).toFixed(2),
+      '수익률': (((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice) * 100).toFixed(2) + '%',
+      '연배당': stock.assetType === '주식'
+        ? (stock.currentPrice * stock.shares * stock.dividendRate / 100).toFixed(2)
+        : (stock.faceValue * stock.shares * stock.dividendRate / 100).toFixed(2)
+    }));
 
-      const url = `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${API_KEY}`;
-      const response = await fetch(url);
-      const data = await response.json();
-      
-      if (data.c && data.c > 0) {
-        const newPrice = data.c;
-        
-        await updateDoc(doc(db, `users/${user.uid}/stocks`, stockId), {
-          currentPrice: newPrice,
-          lastUpdated: new Date()
-        });
-        
-        setStocks(stocks.map(stock => 
-          stock.id === stockId 
-            ? { ...stock, currentPrice: newPrice }
-            : stock
-        ));
-        
-        console.log('✅ 주가 업데이트:', ticker, newPrice);
-        alert(`${ticker} 주가가 $${newPrice.toFixed(2)}로 업데이트되었습니다!`);
-      } else {
-        alert('주가를 가져올 수 없습니다. 티커를 확인해주세요.');
-      }
-    } catch (error) {
-      console.error('주가 업데이트 실패:', error);
-      alert('주가 업데이트 중 오류가 발생했습니다.');
-    }
-  };
-
-  const updateAllPrices = async () => {
-    const stocksOnly = stocks.filter(s => s.assetType === '주식');
-    
-    if (stocksOnly.length === 0) {
-      alert('업데이트할 주식 종목이 없습니다.');
-      return;
-    }
-
-    if (!window.confirm(`${stocksOnly.length}개 주식의 주가를 업데이트할까요?\n(API 제한으로 인해 ${stocksOnly.length}초 정도 걸립니다)`)) {
-      return;
-    }
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const stock of stocksOnly) {
-      try {
-        await updateStockPrice(stock.id, stock.ticker);
-        successCount++;
-        await new Promise(resolve => setTimeout(resolve, 1000));
-      } catch (error) {
-        failCount++;
-        console.error('주가 업데이트 실패:', stock.ticker, error);
-      }
-    }
-
-    alert(`완료!\n성공: ${successCount}개\n실패: ${failCount}개`);
-  };
-
-  const updateBondPrice = async (stockId, newPrice) => {
-    if (!newPrice || isNaN(newPrice)) {
-      alert('올바른 가격을 입력해주세요.');
-      return;
-    }
-
-    try {
-      await updateDoc(doc(db, `users/${user.uid}/stocks`, stockId), {
-        currentPrice: parseFloat(newPrice),
-        lastUpdated: new Date()
-      });
-      
-      setStocks(stocks.map(stock => 
-        stock.id === stockId 
-          ? { ...stock, currentPrice: parseFloat(newPrice) }
-          : stock
-      ));
-      
-      alert('✅ 가격이 업데이트되었습니다!');
-    } catch (error) {
-      console.error('가격 업데이트 실패:', error);
-      alert('업데이트 중 오류가 발생했습니다.');
-    }
+    const ws = XLSX.utils.json_to_sheet(exportData);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Portfolio');
+    XLSX.writeFile(wb, `배당_포트폴리오_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
   return (
     <div>
-      <h1 style={{ margin: '0 0 30px 0', color: '#333' }}>내 포트폴리오</h1>
+      <h1 style={{ margin: '0 0 30px 0', color: '#333' }}>
+        <i className="fa-solid fa-chart-pie" style={{ marginRight: '12px', color: '#667eea' }}></i>
+        포트폴리오
+      </h1>
 
+      {/* 수정 모드 알림 */}
+      {isEditMode && (
+        <div style={{
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          color: 'white',
+          padding: isMobile ? '12px 16px' : '14px 20px',
+          borderRadius: '10px',
+          marginBottom: '20px',
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center'
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            <i className="fa-solid fa-pen-to-square" style={{ fontSize: '18px' }}></i>
+            <span style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: '600' }}>
+              {editingStock?.ticker} 종목 수정 중
+            </span>
+          </div>
+          <button
+            onClick={resetForm}
+            style={{
+              background: 'rgba(255,255,255,0.2)',
+              color: 'white',
+              border: 'none',
+              padding: '6px 12px',
+              borderRadius: '6px',
+              fontSize: isMobile ? '12px' : '13px',
+              cursor: 'pointer',
+              fontWeight: '600'
+            }}
+          >
+            취소
+          </button>
+        </div>
+      )}
+
+      {/* 종목 추가/수정 폼 */}
       <div style={{
         background: 'white',
         padding: isMobile ? '20px' : '30px',
@@ -848,373 +783,401 @@ const exportToCSV = () => {
         marginBottom: '30px',
         boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
       }}>
-        <h2 style={{ margin: '0 0 20px 0', color: '#667eea' }}>자산 추가</h2>
-        
-        <div style={{ marginBottom: '20px' }}>
-          <label style={{ display: 'block', marginBottom: '10px', color: '#666', fontWeight: 'bold', fontSize: isMobile ? '13px' : '14px' }}>
+        <h2 style={{ 
+          margin: '0 0 20px 0', 
+          color: '#667eea',
+          fontSize: isMobile ? '18px' : '24px'
+        }}>
+          {isEditMode ? '✏️ 종목 수정' : '➕ 종목 추가'}
+        </h2>
+
+        {/* 🔥 채권 가격 안내 */}
+        {assetType === '채권' && (
+          <div style={{
+            background: '#fff9e6',
+            border: '2px solid #ffd700',
+            borderRadius: '10px',
+            padding: isMobile ? '12px' : '16px',
+            marginBottom: '20px',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '12px'
+          }}>
+            <i className="fa-solid fa-lightbulb" style={{ 
+              color: '#f59e0b', 
+              fontSize: '20px',
+              marginTop: '2px'
+            }}></i>
+            <div style={{ flex: 1 }}>
+              <p style={{ 
+                margin: '0 0 8px 0', 
+                fontWeight: 'bold', 
+                color: '#2c3e50',
+                fontSize: isMobile ? '13px' : '14px'
+              }}>
+                💡 채권 가격 안내
+              </p>
+              <p style={{ 
+                margin: 0, 
+                color: '#666', 
+                fontSize: isMobile ? '12px' : '13px',
+                lineHeight: '1.6'
+              }}>
+                채권은 실시간 시세 조회가 불가능하여 매수가격이 현재가격으로 유지됩니다. 
+                시장 가격 변동 시 가격 업데이트 버튼으로 수동 조정해주세요.
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* 자산 유형 선택 */}
+        <div style={{ marginBottom: '15px' }}>
+          <label style={{ 
+            display: 'block', 
+            marginBottom: '8px', 
+            fontWeight: 'bold',
+            fontSize: isMobile ? '13px' : '14px'
+          }}>
             자산 유형
           </label>
           <div style={{ display: 'flex', gap: '10px' }}>
             <button
-              onClick={() => handleAssetTypeChange('주식')} 
+              onClick={() => !isEditMode && setAssetType('주식')}
+              disabled={isEditMode}
               style={{
                 flex: 1,
-                padding: isMobile ? '10px 15px' : '12px 30px',
-                background: assetType === '주식' ? '#667eea' : '#e0e0e0',
+                padding: isMobile ? '10px' : '12px',
+                background: assetType === '주식' ? '#667eea' : '#f0f0f0',
                 color: assetType === '주식' ? 'white' : '#666',
                 border: 'none',
                 borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: isMobile ? '14px' : '16px',
+                cursor: isEditMode ? 'not-allowed' : 'pointer',
+                fontSize: isMobile ? '13px' : '14px',
                 fontWeight: 'bold',
-                transition: 'all 0.3s'
+                opacity: isEditMode ? 0.6 : 1
               }}
             >
               📈 주식
             </button>
             <button
-              onClick={() => handleAssetTypeChange('채권')} 
+              onClick={() => !isEditMode && setAssetType('채권')}
+              disabled={isEditMode}
               style={{
                 flex: 1,
-                padding: isMobile ? '10px 15px' : '12px 30px',
-                background: assetType === '채권' ? '#667eea' : '#e0e0e0',
+                padding: isMobile ? '10px' : '12px',
+                background: assetType === '채권' ? '#667eea' : '#f0f0f0',
                 color: assetType === '채권' ? 'white' : '#666',
                 border: 'none',
                 borderRadius: '8px',
-                cursor: 'pointer',
-                fontSize: isMobile ? '14px' : '16px',
+                cursor: isEditMode ? 'not-allowed' : 'pointer',
+                fontSize: isMobile ? '13px' : '14px',
                 fontWeight: 'bold',
-                transition: 'all 0.3s'
+                opacity: isEditMode ? 0.6 : 1
               }}
             >
               📜 채권
             </button>
           </div>
-
-          {assetType === '채권' && (
-            <div style={{
-              background: '#e8f4f8',
-              border: '1px solid #b3d9e6',
-              borderRadius: '8px',
-              padding: '10px 12px',
-              marginTop: '15px',
-              fontSize: isMobile ? '11px' : '13px',
-              color: '#0c5460',
-              lineHeight: '1.5'
-            }}>
-              <strong style={{ display: 'block', marginBottom: '4px' }}>💡 채권 가격 안내</strong>
-              {isMobile 
-                ? '채권은 매수가가 현재가로 유지됩니다. 가격 변동 시 수동 조정하세요.' 
-                : '채권은 실시간 시세 조회가 불가능하여 매수가격이 현재가로 유지됩니다. 시장 가격 변동 시 \'가격 업데이트\' 버튼으로 수동 조정해주세요.'}
-            </div>
-          )}
         </div>
 
-        {/* 입력 폼 - 나머지 코드 동일 */}
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '12px', marginBottom: '12px' }}>
+        {/* 🔥 입력 필드 - 반응형 그리드 */}
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: isMobile ? '1fr' : 'repeat(2, 1fr)',
+          gap: '15px'
+        }}>
+          {/* 티커 */}
           <div>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#666', fontSize: isMobile ? '12px' : '14px' }}>
-              {assetType === '주식' ? '티커' : '종목명'}
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '8px', 
+              fontWeight: 'bold',
+              fontSize: isMobile ? '13px' : '14px'
+            }}>
+              티커
             </label>
-            <input 
+            <input
+              type="text"
               value={ticker}
               onChange={(e) => setTicker(e.target.value.toUpperCase())}
-              placeholder={assetType === '주식' ? "예: AAPL" : "예: 미국10년물"}
+              placeholder="예: AAPL"
+              disabled={isEditMode}
               style={{
                 width: '100%',
                 padding: isMobile ? '10px' : '12px',
                 border: '2px solid #e0e0e0',
                 borderRadius: '8px',
-                fontSize: '16px',
+                fontSize: isMobile ? '13px' : '14px',
+                opacity: isEditMode ? 0.6 : 1,
+                cursor: isEditMode ? 'not-allowed' : 'text',
                 boxSizing: 'border-box'
               }}
             />
-            {assetType === '주식' && (
-              <p style={{ margin: '4px 0 0 0', fontSize: '10px', color: '#999' }}>
-                ✓ 실제 존재하는 티커만 가능
-              </p>
-            )}
           </div>
 
+          {/* 수량 */}
           <div>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#666', fontSize: isMobile ? '12px' : '14px' }}>
-              {assetType === '주식' ? '수량' : '장수'}
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '8px', 
+              fontWeight: 'bold',
+              fontSize: isMobile ? '13px' : '14px'
+            }}>
+              수량
             </label>
-            <input 
+            <input
+              type="number"
               value={shares}
               onChange={(e) => setShares(e.target.value)}
-              placeholder="예: 50"
-              type="number"
+              placeholder="보유 수량"
               style={{
                 width: '100%',
                 padding: isMobile ? '10px' : '12px',
                 border: '2px solid #e0e0e0',
                 borderRadius: '8px',
-                fontSize: '16px',
+                fontSize: isMobile ? '13px' : '14px',
                 boxSizing: 'border-box'
               }}
             />
           </div>
 
+          {/* 매수가 */}
           <div>
-            <label style={{ display: 'block', marginBottom: '5px', color: '#666', fontSize: isMobile ? '12px' : '14px' }}>
-              {isMobile ? '매수가' : '매수 가격 ($)'}
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '8px', 
+              fontWeight: 'bold',
+              fontSize: isMobile ? '13px' : '14px'
+            }}>
+              매수가 ($)
             </label>
-            <input 
-              value={purchasePrice}
-              onChange={(e) => setPurchasePrice(e.target.value)}
-              placeholder="예: 180"
+            <input
               type="number"
               step="0.01"
+              value={purchasePrice}
+              onChange={(e) => setPurchasePrice(e.target.value)}
+              placeholder="평균 매수가"
               style={{
                 width: '100%',
                 padding: isMobile ? '10px' : '12px',
                 border: '2px solid #e0e0e0',
                 borderRadius: '8px',
-                fontSize: '16px',
+                fontSize: isMobile ? '13px' : '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          {/* 액면가 (채권만) */}
+          {assetType === '채권' && (
+            <div>
+              <label style={{ 
+                display: 'block', 
+                marginBottom: '8px', 
+                fontWeight: 'bold',
+                fontSize: isMobile ? '13px' : '14px'
+              }}>
+                액면가 ($)
+              </label>
+              <input
+                type="number"
+                value={faceValue}
+                onChange={(e) => setFaceValue(e.target.value)}
+                placeholder="예: 10000"
+                style={{
+                  width: '100%',
+                  padding: isMobile ? '10px' : '12px',
+                  border: '2px solid #e0e0e0',
+                  borderRadius: '8px',
+                  fontSize: isMobile ? '13px' : '14px',
+                  boxSizing: 'border-box'
+                }}
+              />
+            </div>
+          )}
+
+          {/* 배당률/쿠폰율 */}
+          <div>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '8px', 
+              fontWeight: 'bold',
+              fontSize: isMobile ? '13px' : '14px'
+            }}>
+              {assetType === '주식' ? '배당률 (%)' : '이자율 (%)'}
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              value={dividendRate}
+              onChange={(e) => setDividendRate(e.target.value)}
+              placeholder="예: 4.5"
+              style={{
+                width: '100%',
+                padding: isMobile ? '10px' : '12px',
+                border: '2px solid #e0e0e0',
+                borderRadius: '8px',
+                fontSize: isMobile ? '13px' : '14px',
+                boxSizing: 'border-box'
+              }}
+            />
+          </div>
+
+          {/* 배당 지급 월 */}
+          <div style={{ gridColumn: isMobile ? 'auto' : 'span 2' }}>
+            <label style={{ 
+              display: 'block', 
+              marginBottom: '8px', 
+              fontWeight: 'bold',
+              fontSize: isMobile ? '13px' : '14px'
+            }}>
+              이자 지급월
+            </label>
+            <input
+              type="text"
+              value={dividendMonths}
+              onChange={(e) => setDividendMonths(e.target.value)}
+              placeholder={assetType === '주식' ? "예: 2,5,8,11 또는 매월" : "예: 6,12"}
+              style={{
+                width: '100%',
+                padding: isMobile ? '10px' : '12px',
+                border: '2px solid #e0e0e0',
+                borderRadius: '8px',
+                fontSize: isMobile ? '13px' : '14px',
                 boxSizing: 'border-box'
               }}
             />
           </div>
         </div>
 
-        <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)', gap: '12px' }}>
-          {assetType === '주식' ? (
-            <>
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', color: '#666', fontSize: isMobile ? '12px' : '14px' }}>
-                  배당률 (%)
-                </label>
-                <input 
-                  value={dividendRate}
-                  onChange={(e) => setDividendRate(e.target.value)}
-                  placeholder="예: 0.52"
-                  type="number"
-                  step="0.01"
-                  style={{
-                    width: '100%',
-                    padding: isMobile ? '10px' : '12px',
-                    border: '2px solid #e0e0e0',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', color: '#666', fontSize: isMobile ? '12px' : '14px' }}>
-                  {isMobile ? '배당월' : '배당 지급월'}
-                </label>
-                <input 
-                  value={dividendMonths}
-                  onChange={(e) => setDividendMonths(e.target.value)}
-                  placeholder={isMobile ? "예: 2,5,8,11" : "예: 2,5,8,11 또는 매월"}
-                  style={{
-                    width: '100%',
-                    padding: isMobile ? '10px' : '12px',
-                    border: '2px solid #e0e0e0',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', color: '#666', fontSize: isMobile ? '12px' : '14px' }}>
-                  액면가 ($)
-                </label>
-                <input 
-                  value={faceValue}
-                  onChange={(e) => setFaceValue(e.target.value)}
-                  placeholder="예: 10000"
-                  type="number"
-                  style={{
-                    width: '100%',
-                    padding: isMobile ? '10px' : '12px',
-                    border: '2px solid #e0e0e0',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', color: '#666', fontSize: isMobile ? '12px' : '14px' }}>
-                  쿠폰률 (%)
-                </label>
-                <input 
-                  value={couponRate}
-                  onChange={(e) => setCouponRate(e.target.value)}
-                  placeholder="예: 4.5"
-                  type="number"
-                  step="0.01"
-                  style={{
-                    width: '100%',
-                    padding: isMobile ? '10px' : '12px',
-                    border: '2px solid #e0e0e0',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-
-              <div>
-                <label style={{ display: 'block', marginBottom: '5px', color: '#666', fontSize: isMobile ? '12px' : '14px' }}>
-                  이자 지급월
-                </label>
-                <input 
-                  value={dividendMonths}
-                  onChange={(e) => setDividendMonths(e.target.value)}
-                  placeholder="예: 6,12"
-                  style={{
-                    width: '100%',
-                    padding: isMobile ? '10px' : '12px',
-                    border: '2px solid #e0e0e0',
-                    borderRadius: '8px',
-                    fontSize: '16px',
-                    boxSizing: 'border-box'
-                  }}
-                />
-              </div>
-            </>
-          )}
-
-          <div style={{ display: 'flex', alignItems: 'flex-end' }}>
-            <button 
-              onClick={addStock}
-              disabled={isValidating}
-              style={{
-                width: '100%',
-                padding: '12px',
-                background: isValidating ? '#ccc' : '#667eea',
-                color: 'white',
-                border: 'none',
-                borderRadius: '8px',
-                fontSize: '16px',
-                fontWeight: 'bold',
-                cursor: isValidating ? 'not-allowed' : 'pointer',
-                transition: 'all 0.3s'
-              }}
-              onMouseEnter={(e) => {
-                if (!isValidating) e.target.style.background = '#5568d3';
-              }}
-              onMouseLeave={(e) => {
-                if (!isValidating) e.target.style.background = '#667eea';
-              }}
-            >
-              {isValidating ? '검증 중...' : '+ 추가'}
-            </button>
-          </div>
-        </div>
+        {/* 추가/수정 버튼 */}
+        <button
+          onClick={handleAddOrUpdateStock}
+          disabled={loading}
+          style={{
+            width: '100%',
+            padding: isMobile ? '12px' : '14px',
+            background: loading ? '#ccc' : '#667eea',
+            color: 'white',
+            border: 'none',
+            borderRadius: '8px',
+            fontSize: isMobile ? '14px' : '16px',
+            fontWeight: 'bold',
+            cursor: loading ? 'not-allowed' : 'pointer',
+            transition: 'all 0.3s',
+            marginTop: '15px'
+          }}
+        >
+          {loading ? '처리 중...' : isEditMode ? '✅ 수정 완료' : '+ 종목 추가'}
+        </button>
       </div>
 
-      {/* 🔥 종목 리스트 - 모바일 카드형 / 데스크톱 테이블 */}
-      <div style={{
-        background: 'white',
-        padding: isMobile ? '20px' : '30px',
-        borderRadius: '15px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
-      }}>
+      {/* 🔥 상단 버튼 (Excel 다운로드 + 모든 종목 업데이트) */}
+      {stocks.length > 0 && (
         <div style={{ 
-  display: 'flex', 
-  flexDirection: isMobile ? 'column' : 'row',
-  justifyContent: 'space-between', 
-  alignItems: isMobile ? 'flex-start' : 'center', 
-  marginBottom: '20px',
-  gap: isMobile ? '10px' : '12px'
-}}>
-  <h2 style={{ margin: 0, color: '#667eea', fontSize: isMobile ? '18px' : '24px' }}>
-    보유 자산 ({stocks.length})
-  </h2>
-  
-  {/* 🔥 버튼 그룹 */}
-  <div style={{ 
-    display: 'flex', 
-    gap: '10px',
-    width: isMobile ? '100%' : 'auto'
-  }}>
-    {/* CSV 다운로드 버튼 */}
-    <button
-      onClick={exportToCSV}
-      style={{
-        flex: isMobile ? 1 : 'none',
-        padding: isMobile ? '10px 16px' : '12px 24px',
-        background: '#667eea',
-        color: 'white',
-        border: 'none',
-        borderRadius: '8px',
-        fontSize: isMobile ? '12px' : '14px',
-        fontWeight: 'bold',
-        cursor: 'pointer',
-        transition: 'all 0.3s',
-        whiteSpace: 'nowrap'
-      }}
-      onMouseEnter={(e) => e.target.style.background = '#5568d3'}
-      onMouseLeave={(e) => e.target.style.background = '#667eea'}
-    >
-      {isMobile ? '📥 CSV' : '📥 CSV 다운로드'}
-    </button>
+          marginBottom: '20px', 
+          display: 'flex', 
+          gap: '10px',
+          justifyContent: 'flex-end',
+          flexWrap: 'wrap'
+        }}>
+          <button
+            onClick={handleUpdateAllPrices}
+            disabled={updatingAll}
+            style={{
+              padding: isMobile ? '10px 16px' : '12px 20px',
+              background: updatingAll ? '#ccc' : '#667eea',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: isMobile ? '13px' : '14px',
+              fontWeight: 'bold',
+              cursor: updatingAll ? 'not-allowed' : 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => !updatingAll && (e.target.style.background = '#5568d3')}
+            onMouseLeave={(e) => !updatingAll && (e.target.style.background = '#667eea')}
+          >
+            <i className="fa-solid fa-rotate"></i>
+            {updatingAll ? '업데이트 중...' : '모든 종목 업데이트'}
+          </button>
 
-    {/* 주가 업데이트 버튼 */}
-    {stocks.filter(s => s.assetType === '주식').length > 0 && (
-      <button
-        onClick={updateAllPrices}
-        style={{
-          flex: isMobile ? 1 : 'none',
-          padding: isMobile ? '10px 16px' : '12px 24px',
-          background: '#4caf50',
-          color: 'white',
-          border: 'none',
-          borderRadius: '8px',
-          fontSize: isMobile ? '12px' : '14px',
-          fontWeight: 'bold',
-          cursor: 'pointer',
-          transition: 'all 0.3s',
-          whiteSpace: 'nowrap'
-        }}
-        onMouseEnter={(e) => e.target.style.background = '#45a049'}
-        onMouseLeave={(e) => e.target.style.background = '#4caf50'}
-      >
-        {isMobile ? '📊 업데이트' : '📊 모든 종목 업데이트'}
-      </button>
-    )}
-  </div>
-</div>
+          <button
+            onClick={handleExport}
+            style={{
+              padding: isMobile ? '10px 16px' : '12px 20px',
+              background: '#4caf50',
+              color: 'white',
+              border: 'none',
+              borderRadius: '8px',
+              fontSize: isMobile ? '13px' : '14px',
+              fontWeight: 'bold',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.3s'
+            }}
+            onMouseEnter={(e) => e.target.style.background = '#45a049'}
+            onMouseLeave={(e) => e.target.style.background = '#4caf50'}
+          >
+            <i className="fa-solid fa-download"></i>
+            Excel 다운로드
+          </button>
+        </div>
+      )}
 
-        {stocks.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '60px 20px', color: '#999' }}>
-            <p style={{ fontSize: '48px', margin: 0 }}>📊</p>
-            <p style={{ fontSize: '18px', margin: '20px 0 0 0' }}>
-              자산을 추가해보세요!
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* 🔥 모바일: 카드형 레이아웃 */}
-            {isMobile ? (
-              <div style={{ display: 'grid', gap: '15px' }}>
-                {stocks.map(stock => {
-                  const profitRate = ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice * 100);
-                  const annualDividend = stock.assetType === '주식'
-                    ? stock.currentPrice * stock.shares * stock.dividendRate / 100
-                    : stock.faceValue * stock.shares * stock.dividendRate / 100;
-                  
-                  return (
-                    <div key={stock.id} style={{
-                      background: '#f8f9fa',
-                      padding: '15px',
-                      borderRadius: '12px',
-                      border: '1px solid #e0e0e0'
-                    }}>
-                      {/* 첫 번째 줄: 유형 + 티커 */}
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      {/* 포트폴리오 목록 */}
+      {stocks.length === 0 ? (
+        <div style={{
+          background: 'white',
+          padding: isMobile ? '40px 20px' : '60px 40px',
+          borderRadius: '15px',
+          textAlign: 'center',
+          boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ fontSize: '64px', marginBottom: '20px', opacity: 0.3 }}>📊</div>
+          <h3 style={{ margin: '0 0 10px 0', color: '#999', fontSize: isMobile ? '16px' : '18px' }}>
+            아직 종목이 없어요
+          </h3>
+          <p style={{ margin: 0, color: '#ccc', fontSize: isMobile ? '13px' : '14px' }}>
+            첫 번째 종목을 추가해보세요!
+          </p>
+        </div>
+      ) : (
+        <>
+          {/* 데스크톱 테이블 */}
+          {!isMobile && (
+            <div style={{
+              background: 'white',
+              padding: '30px',
+              borderRadius: '15px',
+              boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
+              overflowX: 'auto'
+            }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
+                    <th style={{ padding: '12px', textAlign: 'left', color: '#666', fontSize: '13px' }}>유형</th>
+                    <th style={{ padding: '12px', textAlign: 'left', color: '#666', fontSize: '13px' }}>티커</th>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#666', fontSize: '13px' }}>수량</th>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#666', fontSize: '13px' }}>매수가</th>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#666', fontSize: '13px' }}>현재가</th>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#666', fontSize: '13px' }}>수익률</th>
+                    <th style={{ padding: '12px', textAlign: 'right', color: '#666', fontSize: '13px' }}>배당률</th>
+                    <th style={{ padding: '12px', textAlign: 'center', color: '#666', fontSize: '13px' }}>배당월</th>
+                    <th style={{ padding: '12px', textAlign: 'center', color: '#666', fontSize: '13px' }}>관리</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {stocks.map(stock => {
+                    const profitRate = ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice * 100).toFixed(2);
+                    return (
+                      <tr key={stock.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                        <td style={{ padding: '12px' }}>
                           <span style={{
                             background: stock.assetType === '주식' ? '#e3f2fd' : '#fff3e0',
                             color: stock.assetType === '주식' ? '#1976d2' : '#f57c00',
@@ -1225,271 +1188,188 @@ const exportToCSV = () => {
                           }}>
                             {stock.assetType === '주식' ? '📈' : '📜'}
                           </span>
-                          <strong style={{ fontSize: '16px', color: '#667eea' }}>
-                            {stock.ticker}
-                          </strong>
-                        </div>
-                        <span style={{
-                          fontSize: '13px',
+                        </td>
+                        <td style={{ padding: '12px', fontWeight: 'bold', fontSize: '14px' }}>{stock.ticker}</td>
+                        <td style={{ padding: '12px', textAlign: 'right' }}>{stock.shares}</td>
+                        <td style={{ padding: '12px', textAlign: 'right' }}>${stock.purchasePrice.toFixed(2)}</td>
+                        <td style={{ padding: '12px', textAlign: 'right', fontWeight: '600' }}>${stock.currentPrice.toFixed(2)}</td>
+                        <td style={{ 
+                          padding: '12px', 
+                          textAlign: 'right',
                           color: profitRate >= 0 ? '#4caf50' : '#ff4757',
-                          fontWeight: 'bold'
+                          fontWeight: '600'
                         }}>
-                          {profitRate >= 0 ? '+' : ''}{profitRate.toFixed(1)}%
-                        </span>
-                      </div>
-
-                      {/* 두 번째 줄: 수량 + 가격 정보 */}
-                      <div style={{
-                        display: 'grid',
-                        gridTemplateColumns: 'repeat(2, 1fr)',
-                        gap: '10px',
-                        marginBottom: '12px',
-                        paddingBottom: '12px',
-                        borderBottom: '1px solid #e0e0e0'
-                      }}>
-                        <div>
-                          <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px' }}>수량</div>
-                          <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
-                            {stock.shares.toLocaleString()}{stock.assetType === '주식' ? '주' : '장'}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px' }}>매수가</div>
-                          <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
-                            ${stock.purchasePrice.toLocaleString()}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px' }}>현재가</div>
-                          <div style={{ fontSize: '14px', fontWeight: 'bold', color: '#667eea' }}>
-                            ${stock.currentPrice.toFixed(2)}
-                          </div>
-                        </div>
-                        <div>
-                          <div style={{ fontSize: '10px', color: '#999', marginBottom: '4px' }}>배당률</div>
-                          <div style={{ fontSize: '14px', fontWeight: 'bold' }}>
-                            {stock.dividendRate}%
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* 세 번째 줄: 배당월 + 연배당 */}
-                      <div style={{
-                        display: 'flex',
-                        justifyContent: 'space-between',
-                        marginBottom: '12px',
-                        fontSize: '12px'
-                      }}>
-                        <div>
-                          <span style={{ color: '#999' }}>배당월: </span>
-                          <span style={{ fontWeight: '600' }}>{stock.dividendMonths || '-'}</span>
-                        </div>
-                        <div>
-                          <span style={{ color: '#999' }}>연배당: </span>
-                          <span style={{ fontWeight: 'bold', color: '#4caf50' }}>
-                            ${annualDividend.toFixed(0)}
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* 네 번째 줄: 버튼 */}
-                      <div style={{ display: 'flex', gap: '8px' }}>
-                        {stock.assetType === '주식' ? (
-                          <button
-                            onClick={() => updateStockPrice(stock.id, stock.ticker)}
-                            style={{
-                              flex: 1,
-                              background: '#2196F3',
-                              color: 'white',
-                              border: 'none',
-                              padding: '8px',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontSize: '12px',
-                              fontWeight: '600'
-                            }}
-                          >
-                            <i className='fa-solid fa-arrow-rotate'></i> 갱신
-                          </button>
-                        ) : (
-                          <button
-                            onClick={() => {
-                              const newPrice = prompt('새 가격을 입력하세요:', stock.currentPrice);
-                              if (newPrice) {
-                                updateBondPrice(stock.id, newPrice);
-                              }
-                            }}
-                            style={{
-                              flex: 1,
-                              background: '#FF9800',
-                              color: 'white',
-                              border: 'none',
-                              padding: '8px',
-                              borderRadius: '6px',
-                              cursor: 'pointer',
-                              fontSize: '12px',
-                              fontWeight: '600'
-                            }}
-                          >
-                            <i className='fa-solid fa-pen-clip'></i> 수정
-                          </button>
-                        )}
-                        <button
-                          onClick={() => deleteStock(stock.id)}
-                          style={{
-                            flex: 1,
-                            background: '#ff4757',
-                            color: 'white',
-                            border: 'none',
-                            padding: '8px',
-                            borderRadius: '6px',
-                            cursor: 'pointer',
-                            fontSize: '12px',
-                            fontWeight: '600'
-                          }}
-                        >
-                          🗑️ 삭제
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            ) : (
-              /* 🔥 데스크톱: 테이블 레이아웃 */
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                  <thead>
-                    <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
-                      <th style={{ padding: '15px', textAlign: 'left', color: '#666' }}>유형</th>
-                      <th style={{ padding: '15px', textAlign: 'left', color: '#666' }}>티커</th>
-                      <th style={{ padding: '15px', textAlign: 'right', color: '#666' }}>수량</th>
-                      <th style={{ padding: '15px', textAlign: 'right', color: '#666' }}>매수가</th>
-                      <th style={{ padding: '15px', textAlign: 'right', color: '#666' }}>현재가</th>
-                      <th style={{ padding: '15px', textAlign: 'right', color: '#666' }}>수익률</th>
-                      <th style={{ padding: '15px', textAlign: 'right', color: '#666' }}>배당률</th>
-                      <th style={{ padding: '15px', textAlign: 'center', color: '#666' }}>배당월</th>
-                      <th style={{ padding: '15px', textAlign: 'right', color: '#666' }}>연배당</th>
-                      <th style={{ padding: '15px', textAlign: 'center', color: '#666' }}>갱신</th>
-                      <th style={{ padding: '15px', textAlign: 'center', color: '#666' }}>삭제</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {stocks.map(stock => {
-                      const profitRate = ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice * 100);
-                      const annualDividend = stock.assetType === '주식'
-                        ? stock.currentPrice * stock.shares * stock.dividendRate / 100
-                        : stock.faceValue * stock.shares * stock.dividendRate / 100;
-                      
-                      return (
-                        <tr key={stock.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                          <td style={{ padding: '15px' }}>
-                            <span style={{
-                              background: stock.assetType === '주식' ? '#e3f2fd' : '#fff3e0',
-                              color: stock.assetType === '주식' ? '#1976d2' : '#f57c00',
-                              padding: '5px 10px',
-                              borderRadius: '5px',
-                              fontSize: '12px',
-                              fontWeight: 'bold'
-                            }}>
-                              {stock.assetType === '주식' ? '📈 주식' : '📜 채권'}
-                            </span>
-                          </td>
-                          <td style={{ padding: '15px', fontWeight: 'bold', color: '#667eea' }}>
-                            {stock.ticker}
-                          </td>
-                          <td style={{ padding: '15px', textAlign: 'right' }}>
-                            {stock.shares.toLocaleString()}{stock.assetType === '주식' ? '주' : '장'}
-                          </td>
-                          <td style={{ padding: '15px', textAlign: 'right' }}>
-                            ${stock.purchasePrice.toLocaleString()}
-                          </td>
-                          <td style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold' }}>
-                            ${stock.currentPrice.toFixed(2)}
-                          </td>
-                          <td style={{ 
-                            padding: '15px', 
-                            textAlign: 'right',
-                            color: profitRate >= 0 ? '#4caf50' : '#ff4757',
-                            fontWeight: 'bold'
-                          }}>
-                            {profitRate >= 0 ? '+' : ''}{profitRate.toFixed(2)}%
-                          </td>
-                          <td style={{ padding: '15px', textAlign: 'right' }}>
-                            {stock.dividendRate}%
-                          </td>
-                          <td style={{ padding: '15px', textAlign: 'center', fontSize: '12px' }}>
-                            {stock.dividendMonths || '-'}
-                          </td>
-                          <td style={{ padding: '15px', textAlign: 'right', fontWeight: 'bold', color: '#4caf50' }}>
-                            ${annualDividend.toFixed(0)}
-                          </td>
-                          <td style={{ padding: '15px', textAlign: 'center' }}>
-                            {stock.assetType === '주식' ? (
-                              <button
-                                onClick={() => updateStockPrice(stock.id, stock.ticker)}
-                                style={{
-                                  background: '#2196F3',
-                                  color: 'white',
-                                  border: 'none',
-                                  padding: '8px 15px',
-                                  borderRadius: '5px',
-                                  cursor: 'pointer',
-                                  fontSize: '14px'
-                                }}
-                                title="실시간 주가로 업데이트"
-                              >
-                                🔄
-                              </button>
-                            ) : (
-                              <button
-                                onClick={() => {
-                                  const newPrice = prompt('새 가격을 입력하세요 (예: 96.5):', stock.currentPrice);
-                                  if (newPrice) {
-                                    updateBondPrice(stock.id, newPrice);
-                                  }
-                                }}
-                                style={{
-                                  background: '#FF9800',
-                                  color: 'white',
-                                  border: 'none',
-                                  padding: '8px 15px',
-                                  borderRadius: '5px',
-                                  cursor: 'pointer',
-                                  fontSize: '14px'
-                                }}
-                                title="가격 수동 입력"
-                              >
-                                ✏️
-                              </button>
-                            )}
-                          </td>
-                          <td style={{ padding: '15px', textAlign: 'center' }}>
+                          {profitRate >= 0 ? '+' : ''}{profitRate}%
+                        </td>
+                        <td style={{ padding: '12px', textAlign: 'right' }}>{stock.dividendRate}%</td>
+                        <td style={{ padding: '12px', textAlign: 'center', fontSize: '12px', color: '#666' }}>
+                          {stock.dividendMonths}
+                        </td>
+                        <td style={{ padding: '12px' }}>
+                          <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
                             <button
-                              onClick={() => deleteStock(stock.id)}
+                              onClick={() => handleEdit(stock)}
+                              title="수정"
                               style={{
+                                padding: '6px 10px',
+                                background: '#667eea',
+                                color: 'white',
+                                border: 'none',
+                                borderRadius: '6px',
+                                cursor: 'pointer',
+                                fontSize: '12px',
+                                fontWeight: '600'
+                              }}
+                            >
+                              <i className="fa-solid fa-pen-to-square"></i>
+                            </button>
+
+                            <button
+                              onClick={() => handleDeleteStock(stock.id)}
+                              title="삭제"
+                              style={{
+                                padding: '6px 10px',
                                 background: '#ff4757',
                                 color: 'white',
                                 border: 'none',
-                                padding: '8px 15px',
-                                borderRadius: '5px',
+                                borderRadius: '6px',
                                 cursor: 'pointer',
-                                fontSize: '14px'
+                                fontSize: '12px',
+                                fontWeight: '600'
                               }}
                             >
-                              삭제
+                              <i className="fa-solid fa-trash-can"></i>
                             </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* 모바일 카드 */}
+          {isMobile && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+              {stocks.map(stock => {
+                const profitRate = ((stock.currentPrice - stock.purchasePrice) / stock.purchasePrice * 100).toFixed(2);
+                return (
+                  <div
+                    key={stock.id}
+                    style={{
+                      background: 'white',
+                      padding: '16px',
+                      borderRadius: '12px',
+                      boxShadow: '0 2px 8px rgba(0,0,0,0.1)'
+                    }}
+                  >
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '12px',
+                      paddingBottom: '12px',
+                      borderBottom: '1px solid #f0f0f0'
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span style={{
+                          background: stock.assetType === '주식' ? '#e3f2fd' : '#fff3e0',
+                          color: stock.assetType === '주식' ? '#1976d2' : '#f57c00',
+                          padding: '4px 8px',
+                          borderRadius: '5px',
+                          fontSize: '11px',
+                          fontWeight: 'bold'
+                        }}>
+                          {stock.assetType === '주식' ? '📈' : '📜'}
+                        </span>
+                        <strong style={{ fontSize: '16px' }}>{stock.ticker}</strong>
+                      </div>
+                      <span style={{
+                        color: profitRate >= 0 ? '#4caf50' : '#ff4757',
+                        fontWeight: 'bold',
+                        fontSize: '14px'
+                      }}>
+                        {profitRate >= 0 ? '+' : ''}{profitRate}%
+                      </span>
+                    </div>
+
+                    <div style={{ fontSize: '13px', lineHeight: '1.8', color: '#666' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>수량:</span>
+                        <strong>{stock.shares}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>매수가:</span>
+                        <strong>${stock.purchasePrice.toFixed(2)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>현재가:</span>
+                        <strong style={{ color: '#2c3e50' }}>${stock.currentPrice.toFixed(2)}</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>배당률:</span>
+                        <strong>{stock.dividendRate}%</strong>
+                      </div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                        <span>배당월:</span>
+                        <strong>{stock.dividendMonths}</strong>
+                      </div>
+                    </div>
+
+                    <div style={{ 
+                      display: 'flex', 
+                      gap: '6px', 
+                      marginTop: '12px',
+                      paddingTop: '12px',
+                      borderTop: '1px solid #f0f0f0'
+                    }}>
+                      <button
+                        onClick={() => handleEdit(stock)}
+                        style={{
+                          flex: 1,
+                          padding: '8px',
+                          background: '#667eea',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          gap: '4px'
+                        }}
+                      >
+                        <i className="fa-solid fa-pen-to-square"></i>
+                        수정
+                      </button>
+
+                      <button
+                        onClick={() => handleDeleteStock(stock.id)}
+                        style={{
+                          padding: '8px 12px',
+                          background: '#ff4757',
+                          color: 'white',
+                          border: 'none',
+                          borderRadius: '6px',
+                          cursor: 'pointer',
+                          fontSize: '12px',
+                          fontWeight: '600'
+                        }}
+                      >
+                        <i className="fa-solid fa-trash-can"></i>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }
@@ -1501,7 +1381,6 @@ function CalendarPage({ stocks }) {
   // 🔥 반응형 state
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   
-
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
     window.addEventListener('resize', handleResize);
@@ -1528,52 +1407,246 @@ function CalendarPage({ stocks }) {
 
   return (
     <div>
-      <h1 style={{ margin: '0 0 30px 0', color: '#333' }}>배당 캘린더</h1>
+      <h1 style={{ margin: '0 0 30px 0', color: '#333' }}>
+        📅 배당 캘린더
+      </h1>
       
       <div style={{
         display: 'grid',
-  gridTemplateColumns: windowWidth <= 480 
-    ? 'repeat(3, 1fr)' 
-    : 'repeat(4, 1fr)',
-  gap: windowWidth <= 480 ? '10px' : '20px'
+        gridTemplateColumns: windowWidth <= 480 
+          ? 'repeat(3, 1fr)' 
+          : 'repeat(4, 1fr)',
+        gap: windowWidth <= 480 ? '10px' : '20px'
       }}
       className="calendar-grid">
-
         {months.map(month => {
           const monthStocks = getMonthlyDividend(month);
+          
+          // 🔥 수정된 배당 계산
           const totalDividend = monthStocks.reduce((sum, stock) => {
-            const dividend = stock.assetType === '주식'
-              ? stock.currentPrice * stock.shares * stock.dividendRate / 100 / 12
-              : stock.faceValue * stock.shares * stock.dividendRate / 100 / 12;
-            return sum + dividend;
+            // 연간 배당액 계산
+            const annualDividend = stock.assetType === '주식'
+              ? stock.currentPrice * stock.shares * stock.dividendRate / 100
+              : stock.faceValue * stock.shares * stock.dividendRate / 100;
+            
+            // 🔥 지급 횟수 계산
+            let frequency;
+            if (stock.dividendMonths === '매월') {
+              frequency = 12;
+            } else {
+              // 배당 월 개수 = 지급 횟수
+              const monthStr = stock.dividendMonths;
+              if (monthStr.includes('월')) {
+                frequency = monthStr.split(',').length;
+              } else {
+                frequency = monthStr.split(',').length;
+              }
+            }
+            
+            // 🔥 이번 달 배당 = 연간 배당 / 지급 횟수
+            const monthlyDividend = annualDividend / frequency;
+            
+            return sum + monthlyDividend;
           }, 0);
 
           return (
-            <div key={month} style={{
-              background: 'white',
-              padding: '30px',
-              borderRadius: '15px',
-              textAlign: 'center',
-              boxShadow: '0 2px 10px rgba(0,0,0,0.1)',
-              transition: 'transform 0.3s',
-              cursor: 'pointer'
-            }}
-            onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-5px)'}
-            onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
+            <div
+              key={month}
+              style={{
+                background: monthStocks.length > 0 ? '#e8f5e9' : 'white',
+                padding: windowWidth <= 480 ? '15px' : '20px',
+                borderRadius: '12px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                textAlign: 'center',
+                transition: 'all 0.3s',
+                border: monthStocks.length > 0 ? '2px solid #4caf50' : '2px solid #e0e0e0',
+                cursor: monthStocks.length > 0 ? 'pointer' : 'default'
+              }}
+              onMouseEnter={(e) => {
+                if (monthStocks.length > 0) {
+                  e.currentTarget.style.transform = 'translateY(-5px)';
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(76, 175, 80, 0.3)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 2px 8px rgba(0,0,0,0.1)';
+              }}
             >
-              <h3 style={{ margin: '0 0 15px 0', color: '#667eea' }}>{month}월</h3>
-              <p style={{ fontSize: '40px', margin: '10px 0' }}>
-                {monthStocks.length > 0 ? <i className="fa-solid fa-piggy-bank"></i> : ' '}
-              </p>
-              <p style={{ color: monthStocks.length > 0 ? '#4caf50' : '#999', fontSize: '14px', margin: '5px 0', fontWeight: 'bold' }}>
+              {/* 월 표시 */}
+              <h3 style={{
+                margin: '0 0 12px 0',
+                color: monthStocks.length > 0 ? '#4caf50' : '#999',
+                fontSize: windowWidth <= 480 ? '16px' : '20px',
+                fontWeight: 'bold'
+              }}>
+                {month}월
+              </h3>
+
+              {/* 배당 아이콘 */}
+              {monthStocks.length > 0 && (
+                <div style={{
+                  fontSize: windowWidth <= 480 ? '24px' : '20px',
+                  margin: '10px 0'
+                }}>
+                  🐷
+                </div>
+              )}
+
+              {/* 배당 금액 */}
+              <p style={{
+                margin: '8px 0',
+                fontSize: windowWidth <= 480 ? '18px' : '22px',
+                fontWeight: 'bold',
+                color: monthStocks.length > 0 ? '#2e7d32' : '#999'
+              }}>
                 ${totalDividend.toFixed(0)}
               </p>
-              <p style={{ color: '#999', fontSize: '12px', margin: '5px 0 0 0' }}>
-                {monthStocks.length}개 종목
+
+              {/* 종목 수 */}
+              <p style={{
+                margin: '4px 0 0 0',
+                fontSize: windowWidth <= 480 ? '11px' : '13px',
+                color: '#666'
+              }}>
+                {monthStocks.length > 0 ? `${monthStocks.length}개 종목` : '0개 종목'}
               </p>
+
+              {/* 종목 리스트 (hover 시 보이게) */}
+              {monthStocks.length > 0 && (
+                <div style={{
+                  marginTop: '12px',
+                  paddingTop: '12px',
+                  borderTop: '1px solid rgba(76, 175, 80, 0.3)',
+                  fontSize: windowWidth <= 480 ? '10px' : '11px',
+                  color: '#666',
+                  lineHeight: '1.4'
+                }}>
+                  {monthStocks.map(s => s.ticker).join(', ')}
+                </div>
+              )}
             </div>
           );
         })}
+      </div>
+
+      {/* 🔥 연간 배당 요약 */}
+      <div style={{
+        background: 'white',
+        padding: windowWidth <= 480 ? '20px' : '30px',
+        borderRadius: '15px',
+        marginTop: '30px',
+        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+      }}>
+        <h2 style={{
+          margin: '0 0 20px 0',
+          color: '#667eea',
+          fontSize: windowWidth <= 480 ? '18px' : '24px'
+        }}>
+          📊 연간 배당 요약
+        </h2>
+
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: windowWidth <= 480 ? '1fr' : 'repeat(3, 1fr)',
+          gap: windowWidth <= 480 ? '12px' : '20px'
+        }}>
+          {/* 총 배당액 */}
+          <div style={{
+            background: '#f8f9fa',
+            padding: windowWidth <= 480 ? '15px' : '20px',
+            borderRadius: '10px',
+            textAlign: 'center'
+          }}>
+            <p style={{
+              margin: '0 0 8px 0',
+              fontSize: windowWidth <= 480 ? '12px' : '14px',
+              color: '#666'
+            }}>
+              연간 총 배당
+            </p>
+            <p style={{
+              margin: 0,
+              fontSize: windowWidth <= 480 ? '24px' : '28px',
+              fontWeight: 'bold',
+              color: '#4caf50'
+            }}>
+              ${months.reduce((sum, month) => {
+                const monthStocks = getMonthlyDividend(month);
+                const monthlyTotal = monthStocks.reduce((s, stock) => {
+                  const annualDiv = stock.assetType === '주식'
+                    ? stock.currentPrice * stock.shares * stock.dividendRate / 100
+                    : stock.faceValue * stock.shares * stock.dividendRate / 100;
+                  const frequency = stock.dividendMonths === '매월' 
+                    ? 12 
+                    : stock.dividendMonths.split(',').length;
+                  return s + (annualDiv / frequency);
+                }, 0);
+                return sum + monthlyTotal;
+              }, 0).toFixed(0)}
+            </p>
+          </div>
+
+          {/* 평균 월 배당 */}
+          <div style={{
+            background: '#f8f9fa',
+            padding: windowWidth <= 480 ? '15px' : '20px',
+            borderRadius: '10px',
+            textAlign: 'center'
+          }}>
+            <p style={{
+              margin: '0 0 8px 0',
+              fontSize: windowWidth <= 480 ? '12px' : '14px',
+              color: '#666'
+            }}>
+              평균 월 배당
+            </p>
+            <p style={{
+              margin: 0,
+              fontSize: windowWidth <= 480 ? '24px' : '28px',
+              fontWeight: 'bold',
+              color: '#667eea'
+            }}>
+              ${(months.reduce((sum, month) => {
+                const monthStocks = getMonthlyDividend(month);
+                const monthlyTotal = monthStocks.reduce((s, stock) => {
+                  const annualDiv = stock.assetType === '주식'
+                    ? stock.currentPrice * stock.shares * stock.dividendRate / 100
+                    : stock.faceValue * stock.shares * stock.dividendRate / 100;
+                  const frequency = stock.dividendMonths === '매월' 
+                    ? 12 
+                    : stock.dividendMonths.split(',').length;
+                  return s + (annualDiv / frequency);
+                }, 0);
+                return sum + monthlyTotal;
+              }, 0) / 12).toFixed(0)}
+            </p>
+          </div>
+
+          {/* 배당 지급 월 */}
+          <div style={{
+            background: '#f8f9fa',
+            padding: windowWidth <= 480 ? '15px' : '20px',
+            borderRadius: '10px',
+            textAlign: 'center'
+          }}>
+            <p style={{
+              margin: '0 0 8px 0',
+              fontSize: windowWidth <= 480 ? '12px' : '14px',
+              color: '#666'
+            }}>
+              배당 지급 월
+            </p>
+            <p style={{
+              margin: 0,
+              fontSize: windowWidth <= 480 ? '24px' : '28px',
+              fontWeight: 'bold',
+              color: '#2c3e50'
+            }}>
+              {months.filter(month => getMonthlyDividend(month).length > 0).length}개월
+            </p>
+          </div>
+        </div>
       </div>
     </div>
   );
@@ -2060,7 +2133,7 @@ function GoalTrackerPage({ stocks }) {
           color: '#34495e',
           fontSize: isMobile ? '18px' : '24px'
         }}>
-          월 배당 현황 (세전)
+          평균 월 배당 현황 (세전)
         </h2>
         
         <div style={{ 
@@ -2079,7 +2152,7 @@ function GoalTrackerPage({ stocks }) {
               color: '#7f8c8d', 
               fontSize: isMobile ? '12px' : '14px'
             }}>
-              현재 월 배당
+              현재 월 배당 (12개월/연간 금액)
             </p>
             <p style={{ 
               margin: 0, 

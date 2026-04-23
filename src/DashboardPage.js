@@ -609,6 +609,222 @@ function DashboardPage({ stocks, user, exchangeRate }) {
         )}
       </div>
 
+
+{/* 🔥 금융소득세 안내 */}
+<div style={{
+  background: 'white',
+  padding: isMobile ? '20px' : '30px',
+  borderRadius: '15px',
+  marginBottom: '30px',
+  boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+}}>
+  <h2 style={{ 
+    margin: '0 0 20px 0', 
+    color: '#667eea',
+    fontSize: isMobile ? '18px' : '24px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px'
+  }}>
+    <i className="fa-solid fa-circle-info"></i>
+    금융소득세 안내
+  </h2>
+  
+  {(() => {
+    // 🔥 연간 배당 KRW 계산
+    const annualDividendKRW = Math.round(totalAnnualDividend * exchangeRate);
+    const threshold = 20000000; // 2천만원
+    const isOverThreshold = annualDividendKRW >= threshold;
+    const remaining = threshold - annualDividendKRW;
+    const excess = annualDividendKRW - threshold;
+    
+    return (
+      <div style={{
+        background: isOverThreshold 
+          ? 'linear-gradient(135deg, #ff6b6b 0%, #ee5a6f 100%)'
+          : 'linear-gradient(135deg, #4caf50 0%, #45a049 100%)',
+        padding: isMobile ? '20px' : '24px',
+        borderRadius: '12px',
+        color: 'white'
+      }}>
+        {/* 현재 배당액 */}
+        <div style={{ 
+          marginBottom: '20px',
+          paddingBottom: '20px',
+          borderBottom: '1px solid rgba(255,255,255,0.3)'
+        }}>
+          <p style={{ 
+            margin: '0 0 8px 0', 
+            fontSize: isMobile ? '12px' : '13px',
+            opacity: 0.9 
+          }}>
+            연간 예상 배당 (원화)
+          </p>
+          <p style={{ 
+            margin: 0, 
+            fontSize: isMobile ? '28px' : '36px',
+            fontWeight: 'bold' 
+          }}>
+            ₩{annualDividendKRW.toLocaleString()}
+          </p>
+          <p style={{ 
+            margin: '8px 0 0 0', 
+            fontSize: isMobile ? '11px' : '12px',
+            opacity: 0.8 
+          }}>
+            (${totalAnnualDividend.toLocaleString(undefined, { maximumFractionDigits: 0 })} × ₩{exchangeRate.toFixed(2)})
+          </p>
+        </div>
+
+        {/* 기준선 대비 */}
+        <div style={{ marginBottom: '20px' }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'baseline',
+            marginBottom: '10px'
+          }}>
+            <span style={{ fontSize: isMobile ? '12px' : '13px', opacity: 0.9 }}>
+              기준: ₩20,000,000
+            </span>
+            <span style={{ fontSize: isMobile ? '13px' : '14px', fontWeight: '600' }}>
+              {((annualDividendKRW / threshold) * 100).toFixed(1)}%
+            </span>
+          </div>
+          
+          {/* 프로그레스 바 */}
+          <div style={{
+            height: '12px',
+            background: 'rgba(255,255,255,0.3)',
+            borderRadius: '6px',
+            overflow: 'hidden'
+          }}>
+            <div style={{
+              height: '100%',
+              width: `${Math.min((annualDividendKRW / threshold) * 100, 100)}%`,
+              background: 'white',
+              transition: 'width 1s ease',
+              boxShadow: isOverThreshold ? '0 0 10px rgba(255,255,255,0.5)' : 'none'
+            }}></div>
+          </div>
+        </div>
+
+        {/* 상태 메시지 */}
+        {isOverThreshold ? (
+          <div>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '12px'
+            }}>
+              <i className="fa-solid fa-triangle-exclamation" style={{ fontSize: isMobile ? '18px' : '20px' }}></i>
+              <p style={{ 
+                margin: 0, 
+                fontSize: isMobile ? '15px' : '17px',
+                fontWeight: 'bold' 
+              }}>
+                금융소득종합과세 대상
+              </p>
+            </div>
+            
+            <p style={{ 
+              margin: '0 0 12px 0', 
+              fontSize: isMobile ? '13px' : '14px',
+              lineHeight: '1.6',
+              opacity: 0.95 
+            }}>
+              연간 배당소득이 2천만원을 <strong>₩{excess.toLocaleString()}</strong> 초과했어요.
+              <br />
+              종합소득세 신고 대상이며, 다른 소득과 합산하여 과세됩니다.
+            </p>
+
+            {/* 세부 정보 */}
+            <div style={{
+              background: 'rgba(0,0,0,0.1)',
+              padding: isMobile ? '12px' : '14px',
+              borderRadius: '8px',
+              fontSize: isMobile ? '12px' : '13px',
+              lineHeight: '1.6'
+            }}>
+              <p style={{ margin: '0 0 8px 0', fontWeight: '600' }}>
+                📌 금융소득종합과세란?
+              </p>
+              <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                <li>이자소득 + 배당소득 합계가 연 2천만원 초과 시 적용</li>
+                <li>근로소득 등 다른 소득과 합산하여 6~45% 누진세율 적용</li>
+                <li>다음 해 5월 종합소득세 신고 필수</li>
+              </ul>
+            </div>
+          </div>
+        ) : (
+          <div>
+            <div style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              marginBottom: '12px'
+            }}>
+              <i className="fa-solid fa-circle-check" style={{ fontSize: isMobile ? '18px' : '20px' }}></i>
+              <p style={{ 
+                margin: 0, 
+                fontSize: isMobile ? '15px' : '17px',
+                fontWeight: 'bold' 
+              }}>
+                분리과세 대상 (안전)
+              </p>
+            </div>
+            
+            <p style={{ 
+              margin: '0 0 12px 0', 
+              fontSize: isMobile ? '13px' : '14px',
+              lineHeight: '1.6',
+              opacity: 0.95 
+            }}>
+              기준까지 <strong>₩{remaining.toLocaleString()}</strong> 여유가 있어요.
+              <br />
+              배당소득세 15.4% 원천징수로 종결됩니다.
+            </p>
+
+            {/* 세부 정보 */}
+            <div style={{
+              background: 'rgba(0,0,0,0.1)',
+              padding: isMobile ? '12px' : '14px',
+              borderRadius: '8px',
+              fontSize: isMobile ? '12px' : '13px',
+              lineHeight: '1.6'
+            }}>
+              <p style={{ margin: '0 0 8px 0', fontWeight: '600' }}>
+                💡 현재 과세 방식
+              </p>
+              <ul style={{ margin: 0, paddingLeft: '20px' }}>
+                <li>미국 배당소득세 15% 원천징수 (미국)</li>
+                <li>국내 배당소득세 15.4% (지방세 포함)</li>
+                <li>별도 신고 불필요 (분리과세)</li>
+              </ul>
+            </div>
+          </div>
+        )}
+
+        {/* 추가 안내 */}
+        <div style={{
+          marginTop: '16px',
+          paddingTop: '16px',
+          borderTop: '1px solid rgba(255,255,255,0.3)',
+          fontSize: isMobile ? '11px' : '12px',
+          opacity: 0.8,
+          lineHeight: '1.5'
+        }}>
+          <i className="fa-solid fa-lightbulb" style={{ marginRight: '6px' }}></i>
+          세율 계산 시 환율 변동과 실제 지급 배당금이 다를 수 있으니 참고용으로만 활용하세요.
+          정확한 세금은 세무사와 상담하시기 바랍니다.
+        </div>
+      </div>
+    );
+  })()}
+</div>
+
+
       {/* 목표 달성률 */}
       <div style={{
         background: 'white',
@@ -751,6 +967,8 @@ function DashboardPage({ stocks, user, exchangeRate }) {
           </div>
         </div>
       )}
+
+      
 
       {/* 🔥 배당 성장률 섹션 */}
       <div style={{
