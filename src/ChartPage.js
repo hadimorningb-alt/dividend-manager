@@ -48,37 +48,39 @@ function ChartPage({ stocks, exchangeRate }) {
     .slice(0, 10);
 
   // ==================== 3. 월별 배당 수령액 ====================
-  const monthlyDividends = Array.from({ length: 12 }, (_, i) => {
-    const month = i + 1;
-    const monthStocks = stocks.filter(stock => {
-      if (!stock.dividendMonths) return false;
-      if (stock.dividendMonths.includes('매월')) return true;
-      const months = stock.dividendMonths.split(',').map(m => parseInt(m.trim()));
-      return months.includes(month);
-    });
-
-    const amount = monthStocks.reduce((sum, stock) => {
-      const annualDiv = stock.assetType === '주식'
-        ? stock.currentPrice * stock.shares * stock.dividendRate / 100
-        : stock.faceValue * stock.shares * stock.dividendRate / 100;
-      
-      let frequency = 12;
-      if (stock.dividendMonths.includes('매월')) {
-        frequency = 12;
-      } else {
-        const monthCount = stock.dividendMonths.split(',').length;
-        frequency = monthCount;
-      }
-      
-      return sum + (annualDiv / frequency);
-    }, 0);
-
-    return {
-      month: `${month}월`,
-      amount: parseFloat(amount.toFixed(0)),
-      amountKRW: Math.round(amount * exchangeRate)
-    };
+ const monthlyDividends = Array.from({ length: 12 }, (_, i) => {
+  const month = i + 1;
+  const monthStocks = stocks.filter(stock => {
+    if (!stock.dividendMonths) return false;
+    if (stock.dividendMonths.includes('매월')) return true;
+    const months = stock.dividendMonths.split(',').map(m => parseInt(m.trim()));
+    return months.includes(month);
   });
+
+  const amount = monthStocks.reduce((sum, stock) => {
+    // 🔥 안전한 값 추출
+    const price = parseFloat(stock.currentPrice) || 0;
+    const shares = parseFloat(stock.shares) || 0;
+    const rate = parseFloat(stock.dividendRate) || 0;
+    const annualDiv = price * shares * rate / 100;
+    
+    let frequency = 12;
+    if (stock.dividendMonths && stock.dividendMonths.includes('매월')) {
+      frequency = 12;
+    } else if (stock.dividendMonths) {
+      const monthCount = stock.dividendMonths.split(',').filter(m => m.trim()).length;
+      frequency = monthCount > 0 ? monthCount : 12;
+    }
+    
+    return sum + (annualDiv / frequency);
+  }, 0);
+
+  return {
+    month: `${month}월`,
+    amount: parseFloat((amount || 0).toFixed(0)),
+    amountKRW: Math.round((amount || 0) * exchangeRate)
+  };
+});
 
   // ==================== 4. 수익률 TOP 5 ====================
   const profitRateTop5 = stocks

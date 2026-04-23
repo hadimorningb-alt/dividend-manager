@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { collection, getDocs, query, orderBy } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, deleteDoc, doc } from 'firebase/firestore';
 import { db } from './firebase';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
@@ -7,6 +7,8 @@ function DashboardPage({ stocks, user, exchangeRate }) {
   const [windowWidth, setWindowWidth] = useState(window.innerWidth);
   const [snapshots, setSnapshots] = useState([]);
   const [loadingSnapshots, setLoadingSnapshots] = useState(true);
+
+
 
   useEffect(() => {
     const handleResize = () => setWindowWidth(window.innerWidth);
@@ -29,12 +31,13 @@ function DashboardPage({ stocks, user, exchangeRate }) {
     ? ((totalAssets - totalInvestment) / totalInvestment * 100).toFixed(2)
     : 0;
 
-  const totalAnnualDividend = stocks.reduce((sum, stock) => {
-    const annualDiv = stock.assetType === '주식'
-      ? stock.currentPrice * stock.shares * stock.dividendRate / 100
-      : stock.faceValue * stock.shares * stock.dividendRate / 100;
-    return sum + annualDiv;
-  }, 0);
+const totalAnnualDividend = stocks.reduce((sum, stock) => {
+  const price = parseFloat(stock.currentPrice) || 0;
+  const shares = parseFloat(stock.shares) || 0;
+  const rate = parseFloat(stock.dividendRate) || 0;
+  const annualDiv = price * shares * rate / 100;
+  return sum + (isNaN(annualDiv) ? 0 : annualDiv);
+}, 0);
 
   const thisMonth = new Date().getMonth() + 1;
   const thisMonthDividends = stocks.filter(stock => {
@@ -44,21 +47,22 @@ function DashboardPage({ stocks, user, exchangeRate }) {
     return months.includes(thisMonth);
   });
 
-  const thisMonthAmount = thisMonthDividends.reduce((sum, stock) => {
-    const annualDiv = stock.assetType === '주식'
-      ? stock.currentPrice * stock.shares * stock.dividendRate / 100
-      : stock.faceValue * stock.shares * stock.dividendRate / 100;
-    
-    let frequency = 12;
-    if (stock.dividendMonths.includes('매월')) {
-      frequency = 12;
-    } else {
-      const monthCount = stock.dividendMonths.split(',').length;
-      frequency = monthCount;
-    }
-    
-    return sum + (annualDiv / frequency);
-  }, 0);
+const thisMonthAmount = thisMonthDividends.reduce((sum, stock) => {
+  const price = parseFloat(stock.currentPrice) || 0;
+  const shares = parseFloat(stock.shares) || 0;
+  const rate = parseFloat(stock.dividendRate) || 0;
+  const annualDiv = price * shares * rate / 100;
+  
+  let frequency = 12;
+  if (stock.dividendMonths && stock.dividendMonths.includes('매월')) {
+    frequency = 12;
+  } else if (stock.dividendMonths) {
+    const monthCount = stock.dividendMonths.split(',').filter(m => m.trim()).length;
+    frequency = monthCount > 0 ? monthCount : 12;
+  }
+  
+  return sum + (annualDiv / frequency);
+}, 0);
 
   const recentStocks = [...stocks]
     .sort((a, b) => {
@@ -81,9 +85,11 @@ function DashboardPage({ stocks, user, exchangeRate }) {
     return `${Math.floor(diffDays / 30)}개월 전`;
   };
 
-  const monthlyGoal = parseFloat(localStorage.getItem('monthlyGoal') || '500000');
-  const currentMonthlyKRW = Math.round((totalAnnualDividend / 12) * exchangeRate);
-  const achievementRate = ((currentMonthlyKRW / monthlyGoal) * 100).toFixed(1);
+const monthlyGoal = parseFloat(localStorage.getItem('monthlyGoal')) || 500000;
+const currentMonthlyKRW = Math.round((totalAnnualDividend / 12) * exchangeRate);
+const achievementRate = monthlyGoal > 0 
+  ? ((currentMonthlyKRW / monthlyGoal) * 100).toFixed(1)
+  : '0';
 
   // 🔥 SNS 공유 함수들
   const shareToClipboard = () => {
@@ -164,8 +170,9 @@ function DashboardPage({ stocks, user, exchangeRate }) {
   // 🔥 차트 데이터 가공
   const chartData = snapshots.map(snapshot => ({
     month: snapshot.month,
-    연배당USD: parseFloat(snapshot.totalAnnualDividend.toFixed(0)),
-    월배당KRW: Math.round(snapshot.monthlyDividend * exchangeRate)
+  연배당USD: parseFloat((parseFloat(snapshot.totalAnnualDividend) || 0).toFixed(0)),
+  월배당KRW: Math.round((parseFloat(snapshot.monthlyDividend) || 0) * exchangeRate)
+
   }));
 
   // 🔥 성장률 계산
@@ -217,6 +224,37 @@ function DashboardPage({ stocks, user, exchangeRate }) {
   return (
     <div>
       <h1 style={{ margin: '0 0 30px 0', color: '#333' }}> 대시보드</h1>
+
+
+{/* 🔥 임시 삭제 버튼 
+{snapshots.some(s => s.month === '2026-04') && (
+  <button
+    onClick={async () => {
+      const confirmed = window.confirm('2026-04 스냅샷을 삭제하시겠습니까?');
+      if (!confirmed) return;
+      
+      try {
+        await deleteDoc(doc(db, `users/${user.uid}/snapshots`, '2026-04'));
+        alert('✅ 삭제 완료!');
+        window.location.reload();
+      } catch (error) {
+        alert('❌ 오류: ' + error.message);
+      }
+    }}
+    style={{
+      padding: '10px 20px',
+      background: '#ff4757',
+      color: 'white',
+      border: 'none',
+      borderRadius: '8px',
+      cursor: 'pointer',
+      marginBottom: '20px',
+      fontWeight: 'bold'
+    }}
+  >
+    🗑️ 잘못된 4월 데이터 삭제
+  </button>
+)}*/}
 
       {/* 환영 메시지 */}
       <div style={{
@@ -858,7 +896,7 @@ function DashboardPage({ stocks, user, exchangeRate }) {
               color: '#666',
               textAlign: isMobile ? 'center' : 'left'
             }}>
-              현재: {currentMonthlyKRW.toLocaleString()}원/월
+              현재: {currentMonthlyKRW.toLocaleString()}원/월 (세전)
             </span>
             <span style={{ 
               fontSize: isMobile ? '13px' : '14px',
@@ -970,229 +1008,254 @@ function DashboardPage({ stocks, user, exchangeRate }) {
 
       
 
-      {/* 🔥 배당 성장률 섹션 */}
-      <div style={{
-        background: 'white',
-        padding: isMobile ? '20px' : '30px',
-        borderRadius: '15px',
-        boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+{/* 🔥 배당 성장률 섹션 */}
+<div style={{
+  background: 'white',
+  padding: isMobile ? '20px' : '30px',
+  borderRadius: '15px',
+  boxShadow: '0 2px 10px rgba(0,0,0,0.1)'
+}}>
+  <h2 style={{ 
+    margin: '0 0 20px 0', 
+    color: '#667eea',
+    fontSize: isMobile ? '18px' : '24px'
+  }}>
+    💹 배당 성장 추이
+  </h2>
+
+  {loadingSnapshots ? (
+    <div style={{
+      padding: '40px',
+      textAlign: 'center',
+      color: '#999'
+    }}>
+      <p>데이터 불러오는 중...</p>
+    </div>
+  ) : snapshots.length === 0 ? (
+    <div style={{
+      background: '#f8f9fa',
+      padding: isMobile ? '30px 20px' : '50px 40px',
+      borderRadius: '12px',
+      textAlign: 'center'
+    }}>
+      <div style={{ fontSize: '48px', margin: '0 0 16px 0', opacity: 0.3 }}>📊</div>
+      <h3 style={{ 
+        margin: '0 0 10px 0', 
+        color: '#2c3e50', 
+        fontSize: isMobile ? '16px' : '18px' 
       }}>
-        <h2 style={{ 
-          margin: '0 0 20px 0', 
-          color: '#667eea',
-          fontSize: isMobile ? '18px' : '24px'
+        아직 기록된 데이터가 없어요
+      </h3>
+      <p style={{ 
+        margin: 0, 
+        color: '#999', 
+        fontSize: isMobile ? '12px' : '13px',
+        lineHeight: '1.6' 
+      }}>
+        종목을 추가하면 매달 자동으로 배당 성장 기록이 쌓여요.<br />
+        최소 2개월 이상의 데이터가 있어야 성장률을 확인할 수 있습니다.
+      </p>
+    </div>
+  ) : (
+    <>
+      {/* 성장률 요약 */}
+      {growth && (
+        <div style={{
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+          padding: isMobile ? '20px' : '28px',
+          borderRadius: '12px',
+          marginBottom: '20px',
+          color: 'white'
         }}>
-          <i className='fa-solid fa-arrow-trend-up'></i> 배당 성장률
-        </h2>
-
-        {loadingSnapshots ? (
           <div style={{
-            padding: '40px',
-            textAlign: 'center',
-            color: '#999'
+            display: 'grid',
+            gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
+            gap: isMobile ? '16px' : '20px'
           }}>
-            <p>데이터 불러오는 중...</p>
-          </div>
-        ) : snapshots.length === 0 ? (
-          <div style={{
-            background: '#f8f9fa',
-            padding: isMobile ? '30px 20px' : '50px 40px',
-            borderRadius: '12px',
-            textAlign: 'center'
-          }}>
-            <div style={{ fontSize: '48px', margin: '0 0 16px 0', opacity: 0.3 }}>📊</div>
-            <h3 style={{ 
-              margin: '0 0 10px 0', 
-              color: '#2c3e50', 
-              fontSize: isMobile ? '16px' : '18px' 
-            }}>
-              아직 기록된 데이터가 없어요
-            </h3>
-            <p style={{ 
-              margin: 0, 
-              color: '#999', 
-              fontSize: isMobile ? '12px' : '13px',
-              lineHeight: '1.6' 
-            }}>
-              종목을 추가하면 매달 자동으로 배당 성장 기록이 쌓여요.<br />
-              최소 2개월 이상의 데이터가 있어야 성장률을 확인할 수 있습니다.
-            </p>
-          </div>
-        ) : (
-          <>
-            {/* 성장률 요약 */}
-            {growth && (
-              <div style={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                padding: isMobile ? '20px' : '28px',
-                borderRadius: '12px',
-                marginBottom: '20px',
-                color: 'white'
-              }}>
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: isMobile ? '1fr' : 'repeat(3, 1fr)',
-                  gap: isMobile ? '16px' : '20px'
-                }}>
-                  <div>
-                    <p style={{ 
-                      margin: '0 0 6px 0', 
-                      fontSize: isMobile ? '11px' : '12px',
-                      opacity: 0.9 
-                    }}>
-                      총 성장률
-                    </p>
-                    <p style={{ 
-                      margin: 0, 
-                      fontSize: isMobile ? '24px' : '32px',
-                      fontWeight: 'bold' 
-                    }}>
-                      {growth.totalGrowth >= 0 ? '+' : ''}{growth.totalGrowth}%
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <p style={{ 
-                      margin: '0 0 6px 0', 
-                      fontSize: isMobile ? '11px' : '12px',
-                      opacity: 0.9 
-                    }}>
-                      기간
-                    </p>
-                    <p style={{ 
-                      margin: 0, 
-                      fontSize: isMobile ? '24px' : '32px',
-                      fontWeight: 'bold' 
-                    }}>
-                      {growth.monthsPassed}개월
-                    </p>
-                  </div>
-                  
-                  <div>
-                    <p style={{ 
-                      margin: '0 0 6px 0', 
-                      fontSize: isMobile ? '11px' : '12px',
-                      opacity: 0.9 
-                    }}>
-                      증가액
-                    </p>
-                    <p style={{ 
-                      margin: 0, 
-                      fontSize: isMobile ? '18px' : '22px',
-                      fontWeight: 'bold' 
-                    }}>
-                      ${(growth.lastAmount - growth.firstAmount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            )}
-
-            {/* 차트 */}
-            <div style={{ marginBottom: '20px' }}>
-              <h3 style={{
-                margin: '0 0 16px 0',
-                color: '#2c3e50',
-                fontSize: isMobile ? '16px' : '18px',
-                fontWeight: '600'
-              }}>
-                <i className='fa-solid fa-water'></i> 배당 성장 추이
-              </h3>
-              
-              <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
-                <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis 
-                    dataKey="month" 
-                    tick={{ fontSize: isMobile ? 10 : 12, fill: '#7f8c8d' }}
-                    axisLine={{ stroke: '#ecf0f1' }}
-                    tickLine={false}
-                  />
-                  <YAxis 
-                    yAxisId="left"
-                    tick={{ fontSize: isMobile ? 10 : 12, fill: '#7f8c8d' }}
-                    axisLine={false}
-                    tickLine={false}
-                    label={{ value: 'USD', position: 'insideLeft', style: { fontSize: 11, fill: '#999' } }}
-                  />
-                  <YAxis 
-                    yAxisId="right"
-                    orientation="right"
-                    tick={{ fontSize: isMobile ? 10 : 12, fill: '#7f8c8d' }}
-                    axisLine={false}
-                    tickLine={false}
-                    label={{ value: 'KRW', position: 'insideRight', style: { fontSize: 11, fill: '#999' } }}
-                  />
-                  <Tooltip content={<CustomTooltip />} />
-                  <Line 
-                    yAxisId="left"
-                    type="monotone" 
-                    dataKey="연배당USD" 
-                    stroke="#667eea" 
-                    strokeWidth={3}
-                    dot={{ fill: '#667eea', r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                  <Line 
-                    yAxisId="right"
-                    type="monotone" 
-                    dataKey="월배당KRW" 
-                    stroke="#4caf50" 
-                    strokeWidth={3}
-                    dot={{ fill: '#4caf50', r: 4 }}
-                    activeDot={{ r: 6 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-
-            {/* 월별 데이터 테이블 */}
             <div>
-              <h3 style={{
-                margin: '0 0 12px 0',
-                color: '#2c3e50',
-                fontSize: isMobile ? '16px' : '18px',
-                fontWeight: '600'
+              <p style={{ 
+                margin: '0 0 6px 0', 
+                fontSize: isMobile ? '11px' : '12px',
+                opacity: 0.9 
               }}>
-                <i className='fa-solid fa-fish'></i> 월별 기록
-              </h3>
-              
-              <div style={{ overflowX: 'auto' }}>
-                <table style={{ 
-                  width: '100%', 
-                  borderCollapse: 'collapse',
-                  fontSize: isMobile ? '12px' : '14px'
-                }}>
-                  <thead>
-                    <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
-                      <th style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'left', color: '#666' }}>월</th>
-                      <th style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'right', color: '#666' }}>연 배당</th>
-                      <th style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'right', color: '#666' }}>월 배당</th>
-                      <th style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'center', color: '#666' }}>종목</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {snapshots.map((snapshot) => (
-                      <tr key={snapshot.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
-                        <td style={{ padding: isMobile ? '10px 6px' : '12px 8px', fontWeight: '600' }}>
-                          {snapshot.month}
-                        </td>
-                        <td style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'right', color: '#667eea', fontWeight: '600' }}>
-                          ${snapshot.totalAnnualDividend.toLocaleString(undefined, { maximumFractionDigits: 0 })}
-                        </td>
-                        <td style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'right', color: '#4caf50', fontWeight: '600' }}>
-                          ₩{Math.round(snapshot.monthlyDividend * exchangeRate).toLocaleString()}
-                        </td>
-                        <td style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'center' }}>
-                          {snapshot.stockCount}개
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+                총 성장률
+              </p>
+              <p style={{ 
+                margin: 0, 
+                fontSize: isMobile ? '24px' : '32px',
+                fontWeight: 'bold' 
+              }}>
+                {growth.totalGrowth >= 0 ? '+' : ''}{growth.totalGrowth}%
+              </p>
             </div>
-          </>
+            
+            <div>
+              <p style={{ 
+                margin: '0 0 6px 0', 
+                fontSize: isMobile ? '11px' : '12px',
+                opacity: 0.9 
+              }}>
+                기간
+              </p>
+              <p style={{ 
+                margin: 0, 
+                fontSize: isMobile ? '24px' : '32px',
+                fontWeight: 'bold' 
+              }}>
+                {growth.monthsPassed}개월
+              </p>
+            </div>
+            
+            <div>
+              <p style={{ 
+                margin: '0 0 6px 0', 
+                fontSize: isMobile ? '11px' : '12px',
+                opacity: 0.9 
+              }}>
+                증가액
+              </p>
+              <p style={{ 
+                margin: 0, 
+                fontSize: isMobile ? '18px' : '22px',
+                fontWeight: 'bold' 
+              }}>
+                ${(growth.lastAmount - growth.firstAmount).toLocaleString(undefined, { maximumFractionDigits: 0 })}
+              </p>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔥 월별 데이터 테이블 (먼저 표시) 
+    <div style={{ marginBottom: '20px' }}>
+  <h3 style={{
+    margin: '0 0 12px 0',
+    color: '#2c3e50',
+    fontSize: isMobile ? '16px' : '18px',
+    fontWeight: '600'
+  }}>
+    📊 월별 기록 ({new Date().getFullYear()})
+  </h3>
+  
+  <div style={{ overflowX: 'auto' }}>
+    <table style={{ 
+      width: '100%', 
+      borderCollapse: 'collapse',
+      fontSize: isMobile ? '12px' : '14px'
+    }}>
+      <thead>
+        <tr style={{ borderBottom: '2px solid #e0e0e0' }}>
+          <th style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'left', color: '#666' }}>월</th>
+          <th style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'right', color: '#666' }}>월 배당</th>
+          <th style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'right', color: '#666' }}>세전 원화</th>
+          <th style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'center', color: '#666' }}>종목</th>
+          <th style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'right', color: '#666' }}>연 배당</th>
+        </tr>
+      </thead>
+      <tbody>
+        {(() => {
+          const currentYear = new Date().getFullYear();
+          const thisYearSnapshots = snapshots.filter(snapshot => 
+            snapshot.month && snapshot.month.startsWith(currentYear.toString())
+          );
+
+          if (thisYearSnapshots.length === 0) {
+            return (
+              <tr>
+                <td colSpan="5" style={{ 
+                  padding: '30px', 
+                  textAlign: 'center', 
+                  color: '#999' 
+                }}>
+                  올해 기록된 데이터가 없습니다
+                </td>
+              </tr>
+            );
+          }
+
+          return thisYearSnapshots.map((snapshot) => {
+            // 🔥 안전한 값 추출
+            const monthlyDiv = parseFloat(snapshot.monthlyDividend) || 0;
+            const annualDiv = parseFloat(snapshot.totalAnnualDividend) || 0;
+            const stockCount = parseInt(snapshot.stockCount) || 0;
+            
+            return (
+              <tr key={snapshot.id} style={{ borderBottom: '1px solid #f0f0f0' }}>
+                <td style={{ padding: isMobile ? '10px 6px' : '12px 8px', fontWeight: '600' }}>
+                  {snapshot.month}
+                </td>
+                <td style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'right', color: '#667eea', fontWeight: '600' }}>
+                  ${monthlyDiv.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </td>
+                <td style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'right', color: '#999', fontSize: isMobile ? '11px' : '12px' }}>
+                  ₩{Math.round(monthlyDiv * exchangeRate).toLocaleString()}
+                </td>
+                <td style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'center' }}>
+                  {stockCount}개
+                </td>
+                <td style={{ padding: isMobile ? '10px 6px' : '12px 8px', textAlign: 'right', color: '#4caf50', fontWeight: '600' }}>
+                  ${annualDiv.toLocaleString(undefined, { maximumFractionDigits: 0 })}
+                </td>
+              </tr>
+            );
+          });
+        })()}
+      </tbody>
+    </table>
+  </div>
+</div> */}
+
+      {/* 🔥 차트 (나중에 표시) */}
+      <div>
+       
+        
+        <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
+          <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
+            <XAxis 
+              dataKey="month" 
+              tick={{ fontSize: isMobile ? 10 : 12, fill: '#7f8c8d' }}
+              axisLine={{ stroke: '#ecf0f1' }}
+              tickLine={false}
+            />
+            <YAxis 
+              yAxisId="left"
+              tick={{ fontSize: isMobile ? 10 : 12, fill: '#7f8c8d' }}
+              axisLine={false}
+              tickLine={false}
+              label={{ value: 'USD', position: 'insideLeft', style: { fontSize: 11, fill: '#999' } }}
+            />
+            <YAxis 
+              yAxisId="right"
+              orientation="right"
+              tick={{ fontSize: isMobile ? 10 : 12, fill: '#7f8c8d' }}
+              axisLine={false}
+              tickLine={false}
+              label={{ value: 'KRW', position: 'insideRight', style: { fontSize: 11, fill: '#999' } }}
+            />
+            <Tooltip content={<CustomTooltip />} />
+            <Line 
+              yAxisId="left"
+              type="monotone" 
+              dataKey="연배당USD" 
+              stroke="#667eea" 
+              strokeWidth={3}
+              dot={{ fill: '#667eea', r: 4 }}
+              activeDot={{ r: 6 }}
+            />
+            <Line 
+              yAxisId="right"
+              type="monotone" 
+              dataKey="월배당KRW" 
+              stroke="#4caf50" 
+              strokeWidth={3}
+              dot={{ fill: '#4caf50', r: 4 }}
+              activeDot={{ r: 6 }}
+            />
+          </LineChart>
+        </ResponsiveContainer>
+      </div>
+    </>
         )}
       </div>
     </div>
