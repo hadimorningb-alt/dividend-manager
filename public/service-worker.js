@@ -1,14 +1,10 @@
-// 🔥 Service Worker - 캐싱 및 오프라인 지원
-/*
 const CACHE_NAME = 'dividend-manager-v1';
 
-// 설치
 self.addEventListener('install', (event) => {
   console.log('✅ Service Worker 설치됨');
   self.skipWaiting();
 });
 
-// 활성화
 self.addEventListener('activate', (event) => {
   console.log('✅ Service Worker 활성화됨');
   event.waitUntil(
@@ -26,22 +22,27 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch - 네트워크 우선 전략
 self.addEventListener('fetch', (event) => {
+  // ✅ GET 요청만 캐싱 (POST 등 제외)
+  if (event.request.method !== 'GET') return;
+
+  // ✅ chrome-extension, firebase 등 외부 요청 제외
+  if (!event.request.url.startsWith('http')) return;
+
   event.respondWith(
     fetch(event.request)
       .then((response) => {
-        // 성공하면 캐시에 저장
-        const responseClone = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseClone);
-        });
+        // 유효한 응답만 캐싱
+        if (response && response.status === 200 && response.type === 'basic') {
+          const responseClone = response.clone();
+          caches.open(CACHE_NAME).then((cache) => {
+            cache.put(event.request, responseClone);
+          });
+        }
         return response;
       })
       .catch(() => {
-        // 실패하면 캐시에서 가져오기
         return caches.match(event.request);
       })
   );
 });
-*/

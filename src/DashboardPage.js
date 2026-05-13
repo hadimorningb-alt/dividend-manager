@@ -3,20 +3,19 @@ import { collection, getDocs, query, orderBy } from 'firebase/firestore';
 import { db } from './firebase';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
-// ── 디자인 토큰 ──
 const C = {
-  dark:    '#1a1a2e',
-  green:   '#22c55e',
-  greenL:  '#86D293',
-  orange:  '#fb923c',
-  purple:  '#667eea',
-  bg:      '#f5f5f0',
-  white:   '#ffffff',
-  card:    '#ffffff',
-  sub:     '#94a3b8',
-  text:    '#1a1a2e',
-  warn:    '#fff7ed',
-  warnB:   '#fb923c',
+  dark:   '#1a1a2e',
+  green:  '#22c55e',
+  greenL: '#86D293',
+  orange: '#fb923c',
+  purple: '#667eea',
+  bg:     '#f5f5f0',
+  white:  '#ffffff',
+  card:   '#ffffff',
+  sub:    '#94a3b8',
+  text:   '#1a1a2e',
+  warn:   '#fff7ed',
+  warnB:  '#fb923c',
 };
 
 function DashboardPage({ stocks, user, exchangeRate }) {
@@ -126,17 +125,23 @@ function DashboardPage({ stocks, user, exchangeRate }) {
     월배당KRW: Math.round((parseFloat(s.monthlyDividend) || 0) * exchangeRate),
   }));
 
+  // ✅ 수정된 calculateGrowth
   const calculateGrowth = () => {
     if (snapshots.length < 2) return null;
     const first = snapshots[0];
     const last = snapshots[snapshots.length - 1];
+    const firstVal = parseFloat(first.totalAnnualDividend) || 0;
+    const lastVal = parseFloat(last.totalAnnualDividend) || 0;
+    if (firstVal === 0) return null;
     return {
-      totalGrowth: ((last.totalAnnualDividend - first.totalAnnualDividend) / first.totalAnnualDividend * 100).toFixed(1),
+      totalGrowth: ((lastVal - firstVal) / firstVal * 100).toFixed(1),
       monthsPassed: snapshots.length - 1,
-      firstAmount: first.totalAnnualDividend,
-      lastAmount: last.totalAnnualDividend,
+      firstAmount: firstVal,
+      lastAmount: lastVal,
     };
   };
+
+  // ✅ 핵심: 함수 호출해서 변수에 담기
   const growth = calculateGrowth();
 
   const CustomTooltip = ({ active, payload }) => {
@@ -150,7 +155,6 @@ function DashboardPage({ stocks, user, exchangeRate }) {
     );
   };
 
-  // ── 공통 카드 스타일 ──
   const card = {
     background: C.white,
     borderRadius: '16px',
@@ -185,15 +189,14 @@ function DashboardPage({ stocks, user, exchangeRate }) {
   );
 
   return (
-    <div style={{ background: C.bg, minHeight: '100vh', padding: isMobile ? '16px' : '24px' }}>
+    <div style={{ background: C.bg, minHeight: '100vh', padding: isMobile ? '5px' : '5px' }}>
 
-      {/* ── 헤더 ── */}
+      {/* 헤더 */}
       <div style={{
-        background: C.dark,
-        borderRadius: '20px',
+        background: C.dark, borderRadius: '20px',
         padding: isMobile ? '24px 20px' : '32px 28px',
         marginBottom: '24px',
-        borderWidth: 1, borderStyle: 'solid', borderColor: '#22c55e33',
+        border: '1px solid #22c55e33',
       }}>
         <p style={{ margin: '0 0 6px 0', fontSize: '13px', color: C.sub }}>안녕하세요 👋</p>
         <h1 style={{ margin: '0 0 8px 0', fontSize: isMobile ? '22px' : '28px', fontWeight: 'bold', color: C.white }}>
@@ -204,9 +207,10 @@ function DashboardPage({ stocks, user, exchangeRate }) {
         </p>
       </div>
 
-      {/* ── SNS 공유 ── */}
+      {/* SNS 공유 */}
       <div style={{
-        background: C.white, borderRadius: '14px', padding: isMobile ? '14px 16px' : '16px 20px',
+        background: C.white, borderRadius: '14px',
+        padding: isMobile ? '14px 16px' : '16px 20px',
         marginBottom: '24px', display: 'flex', alignItems: 'center',
         justifyContent: 'space-between', gap: '12px', flexWrap: 'wrap',
         boxShadow: '0 2px 8px rgba(0,0,0,0.05)',
@@ -226,7 +230,7 @@ function DashboardPage({ stocks, user, exchangeRate }) {
         </div>
       </div>
 
-      {/* ── 포트폴리오 요약 ── */}
+      {/* 포트폴리오 요약 */}
       <div style={card}>
         {cardTitle(<i className='fa-regular fa-file-zipper'></i>, '나의 포트폴리오 요약')}
         <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(2,1fr)', gap: isMobile ? '10px' : '16px' }}>
@@ -237,7 +241,7 @@ function DashboardPage({ stocks, user, exchangeRate }) {
         </div>
       </div>
 
-      {/* ── 이번 달 배당 ── */}
+      {/* 이번 달 배당 */}
       <div style={card}>
         {cardTitle(<i className='fa-solid fa-face-grin-beam'></i>, `이번 달 배당 (${thisMonth}월)`)}
         {thisMonthDividends.length > 0 ? (
@@ -262,7 +266,7 @@ function DashboardPage({ stocks, user, exchangeRate }) {
         )}
       </div>
 
-      {/* ── 금융소득세 안내 ── */}
+      {/* 금융소득세 안내 */}
       <div style={card}>
         {cardTitle(<i className="fa-solid fa-circle-info"></i>, '금융소득세 안내')}
         {(() => {
@@ -271,7 +275,6 @@ function DashboardPage({ stocks, user, exchangeRate }) {
           const over = annualKRW >= threshold;
           const remaining = threshold - annualKRW;
           const excess = annualKRW - threshold;
-
           return (
             <div style={{
               background: over
@@ -279,7 +282,6 @@ function DashboardPage({ stocks, user, exchangeRate }) {
                 : 'linear-gradient(135deg,#22c55e,#16a34a)',
               padding: isMobile ? '20px' : '24px', borderRadius: '14px', color: C.white,
             }}>
-              {/* 현재 배당액 */}
               <div style={{ marginBottom: '18px', paddingBottom: '18px', borderBottom: '1px solid rgba(255,255,255,0.3)' }}>
                 <p style={{ margin: '0 0 6px 0', fontSize: '12px', opacity: 0.9 }}>연간 예상 배당 (원화)</p>
                 <p style={{ margin: 0, fontSize: isMobile ? '28px' : '34px', fontWeight: 'bold' }}>
@@ -289,8 +291,6 @@ function DashboardPage({ stocks, user, exchangeRate }) {
                   (${totalAnnualDividend.toLocaleString(undefined, { maximumFractionDigits: 0 })} × ₩{exchangeRate.toFixed(2)})
                 </p>
               </div>
-
-              {/* 프로그레스 */}
               <div style={{ marginBottom: '18px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '8px' }}>
                   <span style={{ fontSize: '12px', opacity: 0.9 }}>기준: ₩20,000,000</span>
@@ -300,8 +300,6 @@ function DashboardPage({ stocks, user, exchangeRate }) {
                   <div style={{ height: '100%', width: `${Math.min(annualKRW / threshold * 100, 100)}%`, background: C.white, transition: 'width 1s ease' }} />
                 </div>
               </div>
-
-              {/* 상태 */}
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '10px' }}>
                 <i className={over ? "fa-solid fa-triangle-exclamation" : "fa-solid fa-circle-check"} style={{ fontSize: '18px' }}></i>
                 <p style={{ margin: 0, fontSize: isMobile ? '15px' : '17px', fontWeight: 'bold' }}>
@@ -310,10 +308,9 @@ function DashboardPage({ stocks, user, exchangeRate }) {
               </div>
               <p style={{ margin: '0 0 12px 0', fontSize: isMobile ? '13px' : '14px', lineHeight: '1.6', opacity: 0.95 }}>
                 {over
-                  ? <>기준을 <strong>₩{excess.toLocaleString()}</strong> 초과했어요. 종합소득세 신고 대상입니다.</>
-                  : <>기준까지 <strong>₩{remaining.toLocaleString()}</strong> 여유가 있어요. 배당소득세 15.4% 원천징수로 종결됩니다.</>}
+                  ? <>{`기준을 `}<strong>₩{excess.toLocaleString()}</strong>{` 초과했어요. 종합소득세 신고 대상입니다.`}</>
+                  : <>{`기준까지 `}<strong>₩{remaining.toLocaleString()}</strong>{` 여유가 있어요. 배당소득세 15.4% 원천징수로 종결됩니다.`}</>}
               </p>
-
               <div style={{ background: 'rgba(0,0,0,0.12)', padding: '14px', borderRadius: '10px', fontSize: '12px', lineHeight: '1.6' }}>
                 <p style={{ margin: '0 0 8px 0', fontWeight: '600' }}>{over ? '📌 금융소득종합과세란?' : '💡 현재 과세 방식'}</p>
                 <ul style={{ margin: 0, paddingLeft: '18px' }}>
@@ -328,7 +325,6 @@ function DashboardPage({ stocks, user, exchangeRate }) {
                   </>}
                 </ul>
               </div>
-
               <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid rgba(255,255,255,0.3)', fontSize: '11px', opacity: 0.8 }}>
                 <i className="fa-solid fa-lightbulb" style={{ marginRight: '6px' }}></i>
                 참고용이며 정확한 세금은 세무사와 상담하시기 바랍니다.
@@ -338,7 +334,7 @@ function DashboardPage({ stocks, user, exchangeRate }) {
         })()}
       </div>
 
-      {/* ── 목표 달성률 ── */}
+      {/* 목표 달성률 */}
       <div style={card}>
         {cardTitle(<i className='fa-solid fa-bullseye'></i>, '목표 달성률')}
         <div style={{ background: C.bg, padding: isMobile ? '16px' : '20px', borderRadius: '12px' }}>
@@ -368,7 +364,7 @@ function DashboardPage({ stocks, user, exchangeRate }) {
         </div>
       </div>
 
-      {/* ── 최근 추가 종목 ── */}
+      {/* 최근 추가 종목 */}
       {recentStocks.length > 0 && (
         <div style={card}>
           {cardTitle(<i className='fa-solid fa-clock-rotate-left'></i>, '최근 추가 종목')}
@@ -395,10 +391,9 @@ function DashboardPage({ stocks, user, exchangeRate }) {
         </div>
       )}
 
-      {/* ── 배당 성장 추이 ── */}
+      {/* 배당 성장 추이 */}
       <div style={card}>
         {cardTitle('💹', '배당 성장 추이')}
-
         {loadingSnapshots ? (
           <div style={{ padding: '40px', textAlign: 'center', color: C.sub }}>데이터 불러오는 중...</div>
         ) : snapshots.length === 0 ? (
@@ -413,9 +408,8 @@ function DashboardPage({ stocks, user, exchangeRate }) {
           <>
             {growth && (
               <div style={{
-                background: C.dark,
-                padding: isMobile ? '20px' : '24px', borderRadius: '14px',
-                marginBottom: '20px', color: C.white,
+                background: C.dark, padding: isMobile ? '20px' : '24px',
+                borderRadius: '14px', marginBottom: '20px', color: C.white,
                 border: `1px solid ${C.green}33`,
               }}>
                 <div style={{ display: 'grid', gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)', gap: isMobile ? '16px' : '20px' }}>
@@ -432,7 +426,6 @@ function DashboardPage({ stocks, user, exchangeRate }) {
                 </div>
               </div>
             )}
-
             <ResponsiveContainer width="100%" height={isMobile ? 250 : 300}>
               <LineChart data={chartData} margin={{ top: 10, right: 10, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
